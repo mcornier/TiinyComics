@@ -38,7 +38,7 @@ Load Qwen-Image 2.1 from the **Image** block of the chain at the bottom. The pro
 |---|---|
 | `web/app.js` | Interface, project, generation and retouch workflows |
 | `web/project.js` | Data model: formats, page layout tree, sizes and presets (also runs in Node) |
-| `web/pageview.js` | Interactive page view: selection, gutters, framing, sketch editing, zoom |
+| `web/comicview.js` | Interactive page view: selection, gutters, framing, sketch editing, zoom |
 | `web/generate.js` | Context, prompts and requests for panel renders, upscale, extend and retouch |
 | `web/sketch.js` | Sketch elements, SVG drawing and export for the model |
 | `web/store.js` | Projects and images in IndexedDB, `.tiinycomic` files |

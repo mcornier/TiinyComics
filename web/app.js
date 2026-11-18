@@ -1858,7 +1858,7 @@ function bindEditor() {
   $('closeEditorBtn').addEventListener('click', () => setMode(retouch.prevMode));
   $('retouchBtn').addEventListener('click', () => setMode('retouch'));
   $('retouchText').addEventListener('input', refreshRetouchUi);
-  // Raccourcis de l'éditeur : seulement en mode Retouche (le croquis a les siens, dans pageview.js).
+  // Raccourcis de l'éditeur : seulement en mode Retouche (le croquis a les siens, dans comicview.js).
   document.addEventListener('keydown', (event) => {
     if (state.mode !== 'retouch' || !editor.base || retouch.running) return;
     if (!(event.ctrlKey || event.metaKey) || /INPUT|TEXTAREA|SELECT/.test(event.target.tagName)) return;

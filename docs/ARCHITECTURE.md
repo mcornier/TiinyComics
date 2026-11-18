@@ -15,7 +15,7 @@ A static web page with no backend and no build step, like TiinyPaint: plain `<sc
 | `web/editor.js` | TiinyPaint's canvas editor (mask, lasso, restore, stamp, crop, undo...), unchanged copy, used by the Retouch mode | `Editor`, `makeCanvas`, `cloneCanvas` |
 | `web/generate.js` | Context building, LLM and PE chain, render requests, presets, upscale, extend | `ComicGenerator` |
 | `web/export.js` | Page rendering to canvas, PNG, ZIP and PDF export | `ComicExport` |
-| `web/pageview.js` | Interactive page view: panels, dividers, selection, image framing | `PageView` |
+| `web/comicview.js` | Interactive page view: panels, dividers, selection, image framing | `PageView` |
 | `web/app.js` | Wiring: connection, model pickers, project and panel UI | – |
 
 Any module may call `t()` and `iconSvg()`. Only `app.js` reads or writes the DOM of the main page outside its own container.
