@@ -12,7 +12,6 @@
   const MAX_IMAGES = 10; // limite de l'API
   const CONTEXT_SIDE = 1024;
   const SOURCE_SIDE = 2048;
-  const MAGENTA = '#ff00ff';
   const UPSCALE_MAX_REFS = 2; // chaque image coûte environ 15 s d'encodage : peu de références pour un agrandissement
   const EXTEND_MAX_REFS = 3;
   const RETRY_DELAY_MS = 10000;
@@ -76,12 +75,12 @@ Return one strictly valid JSON object and nothing else: {"rewritten_prompt": "..
     return prompt;
   }
 
-  // Même formulation que la diffusion localisée de TiinyPaint (zone magenta).
+  // Un cadre magenta ne marche pas ici : le modèle l'ignore et ré-agrandit l'image. On prolonge l'image en miroir, floutée.
   function buildExtendPrompt({ format, style = '', description = '', refs = [] }) {
     const scene = description.trim() ? ` The panel shows: ${sentence(description)}` : '';
     const look = ` Match the ${formatStyle(format)} style of <image1>${style.trim() ? ` (${style.trim().replace(/[.]$/, '')})` : ''}.`;
     const ref = refs.length ? ` References: ${refs.map((r) => `<image${r.imageN}> is ${r.name ? `"${r.name}"` : 'a reference image'}`).join(', ')}.` : '';
-    return `In <image1>, repaint the solid magenta area: extend this comic panel beyond its current frame, continuing the scene, setting and characters naturally.${scene}${look}${ref} The result must blend naturally with its surroundings, and no magenta may remain. Everything outside the magenta area stays exactly unchanged.`;
+    return `<image1> is a comic panel whose outer areas are blurry placeholders around the sharp original picture. Repaint the blurry areas with sharp, detailed content that extends the scene naturally beyond the original frame, keeping the same composition, scale and perspective.${scene}${look}${ref} Keep the sharp picture exactly where it is, at the same size: do not zoom, move or redraw it. No blur may remain.`;
   }
 
   // Ordre des images : [image source], références, cases précédentes (les plus anciennes tombent en premier), croquis.
@@ -143,7 +142,8 @@ Return one strictly valid JSON object and nothing else: {"rewritten_prompt": "..
     return {
       draw: r, // position exacte (non rognée) pour drawImage
       covered: { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) },
-      feather: Math.max(4, Math.round(Math.max(outW, outH) * 0.012)),
+      // Fondu large : le modèle redessine aussi la zone gardée, avec une teinte un peu différente.
+      feather: Math.max(12, Math.round(Math.min(x1 - x0, y1 - y0) * 0.08)),
     };
   }
 
@@ -356,7 +356,7 @@ Return one strictly valid JSON object and nothing else: {"rewritten_prompt": "..
       return { body, sources, size: { width, height }, plan, contextPanels };
     }
 
-    // Image actuelle cadrée comme dans la case, sur un canevas au format de la case ; le reste en magenta.
+    // Image actuelle cadrée comme dans la case, sur un canevas au format de la case ; le reste en miroir flouté.
     async _prepareExtend(version, [outW, outH], placement) {
       const blob = await this.store.blob(version.assetId);
       if (!blob) throw codedError('noImage', 'Image not found');
@@ -375,15 +375,36 @@ Return one strictly valid JSON object and nothing else: {"rewritten_prompt": "..
       octx.clip();
       octx.drawImage(bitmap, geo.draw.x, geo.draw.y, geo.draw.w, geo.draw.h);
       octx.restore();
-      bitmap.close?.();
+      // Fond : l'image prolongée en miroir sur ses bords puis floutée, sans copie agrandie (pas de sujet fantôme).
       const sent = makeCanvas(outW, outH);
       const sctx = sent.getContext('2d');
-      sctx.fillStyle = MAGENTA;
-      sctx.fillRect(0, 0, outW, outH);
-      // Rectangle entier : pas de pixels mi-magenta sur le bord ; fond blanc sous un original transparent.
-      sctx.fillStyle = '#fff';
-      sctx.fillRect(geo.covered.x, geo.covered.y, geo.covered.w, geo.covered.h);
-      sctx.drawImage(original, 0, 0);
+      const d = geo.draw;
+      sctx.filter = `blur(${Math.max(6, Math.round(Math.max(outW, outH) * 0.02))}px)`;
+      for (let i = -2; i <= 2; i += 1) {
+        for (let j = -2; j <= 2; j += 1) {
+          sctx.save();
+          sctx.translate(d.x + i * d.w + (i % 2 ? d.w : 0), d.y + j * d.h + (j % 2 ? d.h : 0));
+          sctx.scale(i % 2 ? -1 : 1, j % 2 ? -1 : 1);
+          sctx.drawImage(bitmap, 0, 0, d.w, d.h);
+          sctx.restore();
+        }
+      }
+      sctx.filter = 'none';
+      bitmap.close?.();
+      // Original posé avec un bord fondu : aucune arête nette entre l'image et la zone à repeindre.
+      const soft = makeCanvas(outW, outH);
+      const softCtx = soft.getContext('2d');
+      softCtx.drawImage(original, 0, 0);
+      const { x: cx, y: cy, w: cw, h: ch } = geo.covered;
+      const px = softCtx.getImageData(cx, cy, cw, ch);
+      for (let j = 0; j < ch; j += 1) {
+        for (let i = 0; i < cw; i += 1) {
+          const k = (j * cw + i) * 4 + 3;
+          px.data[k] = Math.round(px.data[k] * featherWeight(cx + i, cy + j, geo.covered, outW, outH, geo.feather));
+        }
+      }
+      softCtx.putImageData(px, cx, cy);
+      sctx.drawImage(soft, 0, 0);
       return { image: sent.toDataURL('image/png'), original, geo, width: outW, height: outH };
     }
 
