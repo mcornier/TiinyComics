@@ -449,14 +449,11 @@ function renderChain(active = null) {
   const pe = peChoice();
   $('nodeLlm').classList.toggle('off', !llm);
   $('nodePe').classList.toggle('off', !pe);
-  for (const [id, stage] of [['nodeLlm', 'llm'], ['nodePe', 'pe'], ['nodeModel', 'model'], ['nodeOutput', 'output']]) {
-    $(id).classList.toggle('active', active === stage);
+  for (const [id, stage] of [['nodeLlm', 'llm'], ['nodePe', 'pe'], ['nodeModel', 'model']]) {
+    $(id).classList.toggle('active', active === stage || (id === 'nodeModel' && active === 'output'));
   }
   const loadingImage = state.loading && state.loading.id === $('imageModel').value;
   $('nodeModel').classList.toggle('loading', !!loadingImage);
-  const wires = document.querySelectorAll('#chain .wire');
-  const order = ['llm', 'pe', 'model'];
-  wires.forEach((w, i) => w.classList.toggle('active', active === order[i] || (active === 'output' && i === 2)));
 }
 
 function setExpanded(button, body, open) {
@@ -1323,7 +1320,6 @@ async function renderPanel(mode, preset = state.preset) {
       onPreview: ({ image, step, total: n }) => {
         lastStep = step;
         total = n;
-        $('stepNow').textContent = `${step}/${n}`;
         const img = new Image();
         img.onload = () => pageView.setRendering({ panelId: panel.id, url: image, width: img.naturalWidth, height: img.naturalHeight, label: `${step}/${n}` });
         img.src = image;
@@ -1346,7 +1342,6 @@ async function renderPanel(mode, preset = state.preset) {
     else reportError(err, 'renderStopped');
   } finally {
     clearInterval(timer);
-    $('stepNow').textContent = '';
     pageView.rendering = null;
     renderChain();
     endTask();
@@ -1485,6 +1480,48 @@ function toggleDevicePanel(open) {
   $('deviceBtn').setAttribute('aria-expanded', String(open));
 }
 
+/* ---------- Mise en page : panneaux fixes, blocs repliables ---------- */
+
+// Hauteur réelle des barres fixes du haut et du bas : la zone centrale se cale entre les deux.
+function measureBars() {
+  const gap = 10;
+  const root = document.documentElement.style;
+  const fixed = getComputedStyle($('chain')).position === 'fixed';
+  root.setProperty('--top-h', fixed ? `${Math.ceil(document.querySelector('.topbar').getBoundingClientRect().bottom + gap)}px` : '0px');
+  root.setProperty('--bottom-h', fixed ? `${Math.ceil(window.innerHeight - $('chain').getBoundingClientRect().top + gap)}px` : '0px');
+}
+
+function renderCollapsibles() {
+  const collapsed = state.settings.collapsed || {};
+  for (const btn of document.querySelectorAll('.collapse-btn')) {
+    const id = btn.dataset.collapse;
+    const closed = !!collapsed[id];
+    $(id).classList.toggle('collapsed', closed);
+    const side = id === 'libraryPanel';
+    btn.innerHTML = iconSvg(side ? (closed ? 'panel-left-open' : 'panel-left-close') : (closed ? 'chevron-down' : 'chevron-up'));
+    btn.setAttribute('aria-expanded', String(!closed));
+    btn.title = t(closed ? 'expandBlock' : 'collapseBlock');
+    btn.setAttribute('aria-label', btn.title);
+  }
+  document.body.classList.toggle('library-collapsed', !!collapsed.libraryPanel);
+}
+
+function bindCollapsibles() {
+  for (const btn of document.querySelectorAll('.collapse-btn')) {
+    btn.addEventListener('click', () => {
+      const collapsed = (state.settings.collapsed ||= {});
+      collapsed[btn.dataset.collapse] = !collapsed[btn.dataset.collapse];
+      renderCollapsibles();
+      saveSettings();
+    });
+  }
+  const observer = new ResizeObserver(measureBars);
+  observer.observe(document.querySelector('.topbar'));
+  observer.observe($('chain'));
+  window.addEventListener('resize', measureBars);
+  measureBars();
+}
+
 /* ---------- Langue ---------- */
 
 function setLanguage(lang) {
@@ -1498,6 +1535,7 @@ function setLanguage(lang) {
   for (const select of pickers.keys()) syncPicker(select);
   if (!state.client || !connectionLabel) $('connText').textContent = t('notConnected');
   renderConnButton();
+  renderCollapsibles();
   if (state.project) renderAll();
   if (idle || !$('status').textContent) setStatus(t('ready'));
   saveSettings();
@@ -1690,6 +1728,8 @@ async function start() {
   applyI18n(state.settings.language || detectLanguage());
   $('language').value = currentLang;
   bindEvents();
+  bindCollapsibles();
+  renderCollapsibles();
   enhancePickers();
   setExpanded($('llmToggle'), $('llmBody'), false);
   setExpanded($('modelToggle'), $('modelBody'), false);

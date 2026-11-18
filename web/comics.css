@@ -45,7 +45,8 @@
 .ref-pick span { position: absolute; left: 0; right: 0; bottom: 0; padding: 1px 4px; background: rgba(0, 0, 0, .6); color: var(--text); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Barre de page */
-.page-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; width: 100%; padding: 6px 8px; }
+.page-bar { position: sticky; top: var(--top-h); z-index: 10; flex: none; display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; width: 100%; min-width: 0; padding: 6px 8px; white-space: nowrap; }
+.page-bar .field.num { width: 84px; }
 .bar-sep { width: 1px; height: 22px; background: var(--line); }
 .page-nav { display: flex; align-items: center; gap: 2px; }
 .page-bar .picker.field { min-height: 30px; }
@@ -140,46 +141,101 @@
 .pill:disabled:hover { background: transparent; }
 #panelTitle { font-size: 14px; }
 
-/* Chaîne de modèles, à la place du graphe de TiinyPaint */
-.chain { position: relative; z-index: 5; flex: none; display: flex; align-items: center; padding: 0; }
+/* Chaîne de modèles, à la place du graphe de TiinyPaint : trois blocs, sans flèches */
+.chain { z-index: 30; display: flex; align-items: stretch; gap: 10px; padding: 0; }
 .chain .node { position: relative; flex: 1; min-width: 0; min-height: 0; margin: 0; padding: 4px 10px; }
 .chain .node-row { min-height: 48px; }
 .chain .node-body { position: absolute; left: 0; bottom: calc(100% + 8px); width: 330px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: rgba(22, 25, 30, .95); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); box-shadow: 0 -12px 40px rgba(0, 0, 0, .45); max-height: 62vh; }
 .chain .node-model .node-body { left: auto; right: 0; }
 .chain .node:has(.node-body:not([hidden])) { background: var(--node); box-shadow: none; }
 .chain .node-model { flex: 1.35; }
-.chain .node-output { flex: none; width: 96px; height: 58px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 0; }
-.chain .wire { flex: none; position: relative; width: 30px; height: 58px; }
-.chain .wire::before { content: ""; position: absolute; left: 2px; right: 8px; top: 28px; border-top: 2px solid var(--line-strong); }
-.chain .wire::after { content: ""; position: absolute; right: 2px; top: 23px; border: 6px solid transparent; border-left: 8px solid var(--line-strong); border-right: 0; }
-.chain .wire.active::before { border-top-color: var(--active); filter: drop-shadow(0 0 5px var(--active)); }
-.chain .wire.active::after { border-left-color: var(--active); }
-.chain .wire.skip::before { border-top-style: dashed; opacity: .55; }
 .node-tag { flex: none; padding: 1px 6px; border-radius: 6px; background: rgba(255, 255, 255, .08); color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
 .node.off { border-style: dashed; }
 .node.off .node-row > .icon-slot { opacity: .5; }
-.step-now { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
+/* Mise en page : la barre du haut, la chaîne et les panneaux sont fixes ; la zone centrale défile avec le document,
+   et c'est la barre de défilement de la fenêtre, à droite, qui sert. */
+:root { --gap: 10px; --top-h: 84px; --bottom-h: 80px; --left-w: 270px; --right-w: 340px; }
+html, body { height: auto; min-height: 100%; }
+body { display: block; padding: 0; overflow-x: hidden; overflow-y: auto; }
+body.library-collapsed { --left-w: 50px; }
+.topbar { position: fixed; top: var(--gap); left: var(--gap); right: var(--gap); z-index: 30; flex-wrap: nowrap; }
+.chain { position: fixed; left: var(--gap); right: var(--gap); bottom: var(--gap); }
+.side { position: fixed; top: var(--top-h); bottom: var(--bottom-h); z-index: 20; min-height: 0; }
+.side-left { left: var(--gap); width: var(--left-w); }
+.side-right { right: var(--gap); width: var(--right-w); display: flex; flex-direction: column; gap: var(--gap); }
+.stage {
+  min-height: 100vh;
+  padding: var(--top-h) calc(var(--right-w) + 2 * var(--gap)) var(--bottom-h) calc(var(--left-w) + 2 * var(--gap));
+  gap: var(--gap);
+  container-type: inline-size;
+}
+/* Page à plat : elle tient dans la fenêtre, rien ne défile. Webtoon : les bandes s'empilent et la fenêtre défile. */
+.stage:has(.viewport.fit) { height: 100vh; overflow: clip; }
+.viewport.webtoon { flex: none; overflow: visible; padding-bottom: 40px; }
+.viewport.webtoon .page { scroll-margin-top: calc(var(--top-h) + 64px); }
+.status { position: sticky; bottom: var(--bottom-h); flex: none; }
+
+/* Blocs repliables */
+.block-head h2 { display: flex; align-items: center; gap: 7px; }
+.block-body { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.block.collapsed .block-body, .side.collapsed .block-body { display: none; }
+.side-right > .block { min-height: 0; }
+#pagesPanel { flex: 0 1 auto; max-height: 44%; }
+#panelEditor { flex: 1 1 0; }
+#pagesPanel.collapsed, #panelEditor.collapsed { flex: none; max-height: none; }
+.side-right:has(#panelEditor.collapsed) #pagesPanel:not(.collapsed) { flex: 0 1 auto; max-height: 100%; }
+.side-left { transition: width .18s ease; }
+.side-left.collapsed { padding: 10px 6px; overflow: hidden; }
+.side-left.collapsed .block-head { flex-direction: column-reverse; gap: 10px; }
+.side-left.collapsed .block-head h2 span[data-i18n], .side-left.collapsed #libraryCount { display: none; }
+.side-left.collapsed .block-head h2 { color: var(--muted); }
+.section-actions .muted { font-size: 12px; }
+
+/* Barre de page sur une ligne : les libellés cèdent la place aux icônes quand la zone se resserre. */
+@container (max-width: 1060px) {
+  .page-bar #modes button span, .page-bar #templateBtn span, .page-bar .bar-label { display: none; }
+}
+@container (max-width: 640px) {
+  .page-bar .bar-sep, .page-bar #stripHeightBox { display: none !important; }
+}
+
+/* Barres de défilement assorties à l'interface */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 10px; background: rgba(255, 255, 255, .2); background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background-color: rgba(255, 255, 255, .36); }
+::-webkit-scrollbar-thumb:active { background-color: rgba(74, 222, 128, .7); }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .24) transparent; }
+}
+
+@media (max-width: 1450px) {
+  .topbar .meter { display: none; }
+}
+.topbar .meter-track { width: 60px; }
+.topbar .meter-value { min-width: 54px; }
+
+/* Écran étroit : tout s'empile et la page défile normalement. */
 @media (max-width: 1100px) {
-  html, body { height: auto; }
-  body { overflow: auto; }
-  .layout { grid-template-columns: 1fr; }
-  .stage { order: -1; }
-  .viewport { height: 72vh; flex: none; }
-  .panel { overflow: visible; }
-  .chain { flex-wrap: wrap; gap: 8px; }
-  .chain .wire { display: none; }
+  body { display: flex; flex-direction: column; gap: var(--gap); padding: var(--gap); }
+  .topbar, .chain, .side { position: static; width: auto; }
+  .topbar { flex-wrap: wrap; }
+  .stage { order: 1; min-height: 0; padding: 0; }
+  .stage:has(.viewport.fit) { height: auto; overflow: visible; }
+  .viewport.fit { height: 72vh; flex: none; }
+  .page-bar { top: 0; }
+  .status { position: static; }
+  .side-right { order: 2; }
+  .side-left { order: 3; }
+  .chain { order: 4; flex-wrap: wrap; }
   .chain .node { flex: 1 1 260px; }
+  #pagesPanel, #panelEditor { max-height: none; flex: none; }
+  .panel { overflow: visible; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .cell.rendering::after { animation: none; }
-}
-
-/* La barre du haut tient sur une ligne : les jauges se resserrent avant de passer à la ligne. */
-.topbar { flex-wrap: nowrap; }
-.topbar .meter-track { width: 60px; }
-.topbar .meter-value { min-width: 54px; }
-@media (max-width: 1450px) {
-  .topbar .meter { display: none; }
+  .side-left { transition: none; }
 }

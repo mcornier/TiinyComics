@@ -52,16 +52,99 @@
     <button id="connBtn" type="button" class="btn"></button>
   </header>
 
-  <main class="layout">
-    <!-- Case sélectionnée : description, références, contexte, rendu -->
-    <aside id="panelEditor" class="panel glass controls">
-      <div class="section-head">
-        <h2 id="panelTitle"></h2>
+  <!-- Gauche : bibliothèque et histoire, repliable -->
+  <aside id="libraryPanel" class="panel glass context side side-left">
+    <div class="context-head block-head">
+      <h2><span class="icon-slot small" data-icon="images"></span><span data-i18n="library"></span></h2>
+      <span class="section-actions">
+        <span id="libraryCount" class="muted"></span>
+        <button type="button" class="btn icon-btn collapse-btn" data-collapse="libraryPanel" aria-expanded="true"></button>
+      </span>
+    </div>
+    <div class="block-body">
+      <p class="hint" data-i18n="libraryHint"></p>
+      <button id="uploadBtn" type="button" class="btn dashed" data-icon="upload" data-i18n="loadImages"></button>
+      <input id="fileInput" type="file" accept="image/*" multiple hidden>
+      <div id="library" class="gallery"></div>
+
+      <details class="story">
+        <summary class="section-title"><span class="icon-slot small" data-icon="book"></span><span data-i18n="story"></span></summary>
+        <label class="stack"><span data-i18n="styleLabel"></span>
+          <textarea id="projectStyle" class="field" rows="3" data-i18n-placeholder="stylePlaceholder"></textarea></label>
+        <label class="stack"><span data-i18n="synopsisLabel"></span>
+          <textarea id="synopsis" class="field" rows="4" data-i18n-placeholder="synopsisPlaceholder"></textarea></label>
+      </details>
+    </div>
+  </aside>
+
+  <!-- Centre : la page défile avec le document -->
+  <section id="stage" class="stage">
+    <div class="page-bar glass">
+      <label class="opt" data-i18n-title="formatLabel">
+        <span class="icon-slot small" data-icon="book-open"></span>
+        <select id="format" class="field compact" data-i18n-aria="formatLabel">
+          <option value="bd" data-i18n="formatBd"></option>
+          <option value="comics" data-i18n="formatComics"></option>
+          <option value="manga" data-i18n="formatManga"></option>
+          <option value="webtoon" data-i18n="formatWebtoon"></option>
+        </select>
+      </label>
+      <span class="bar-sep"></span>
+      <div id="modes" class="tools" role="toolbar">
+        <button type="button" data-mode="layout" data-icon="mouse-pointer-2" data-i18n="modeLayout" data-i18n-title="modeLayout"></button>
+        <button type="button" data-mode="frame" data-icon="move" data-i18n="modeFrame" data-i18n-title="modeFrame"></button>
+      </div>
+      <span class="bar-sep"></span>
+      <button id="splitColsBtn" type="button" class="btn icon-btn" data-icon="columns-2" data-i18n-title="splitCols" data-i18n-aria="splitCols"></button>
+      <button id="splitRowsBtn" type="button" class="btn icon-btn" data-icon="rows-2" data-i18n-title="splitRows" data-i18n-aria="splitRows"></button>
+      <button id="removePanelBtn" type="button" class="btn icon-btn" data-icon="trash-2" data-i18n-title="removePanel" data-i18n-aria="removePanel"></button>
+      <div class="project-box">
+        <button id="templateBtn" type="button" class="btn small" data-icon="layout-grid" data-i18n="templates" data-i18n-title="templates" aria-expanded="false"></button>
+        <div id="templateMenu" class="menu template-menu" hidden></div>
+      </div>
+      <span class="spacer"></span>
+      <label id="stripHeightBox" class="opt" data-i18n-title="stripHeight" hidden><span class="icon-slot small" data-icon="move-vertical"></span><span class="bar-label" data-i18n="stripHeight"></span>
+        <input id="stripHeight" class="field num" type="number" min="400" max="20000" step="100"></label>
+      <span id="pageNav" class="page-nav">
+        <button id="prevPageBtn" type="button" class="btn icon-btn" data-icon="chevron-left" data-i18n-title="prevPage" data-i18n-aria="prevPage"></button>
+        <span id="pageInfo" class="frame-info"></span>
+        <button id="nextPageBtn" type="button" class="btn icon-btn" data-icon="chevron-right" data-i18n-title="nextPage" data-i18n-aria="nextPage"></button>
+      </span>
+    </div>
+
+    <div id="viewport" class="viewport"></div>
+    <p id="status" class="status" role="status"></p>
+  </section>
+
+  <!-- Droite : pages, puis la case sélectionnée ; deux blocs repliables -->
+  <div class="side side-right">
+    <section id="pagesPanel" class="panel glass block">
+      <div class="context-head block-head">
+        <h2 data-i18n="pages"></h2>
         <span class="section-actions">
-          <button id="prevPanelBtn" type="button" class="btn icon-btn" data-icon="chevron-left" data-i18n-title="prevPanel" data-i18n-aria="prevPanel"></button>
-          <button id="nextPanelBtn" type="button" class="btn icon-btn" data-icon="chevron-right" data-i18n-title="nextPanel" data-i18n-aria="nextPanel"></button>
+          <span id="pageCount" class="muted"></span>
+          <button type="button" class="btn icon-btn collapse-btn" data-collapse="pagesPanel" aria-expanded="true"></button>
         </span>
       </div>
+      <div class="block-body">
+        <div id="pageList" class="page-list"></div>
+        <div class="row">
+          <button id="addPageBtn" type="button" class="btn dashed grow-btn" data-icon="file-plus" data-i18n="addPage"></button>
+          <button id="removePageBtn" type="button" class="btn icon-btn" data-icon="trash-2" data-i18n-title="removePage" data-i18n-aria="removePage"></button>
+        </div>
+      </div>
+    </section>
+
+      <section id="panelEditor" class="panel glass controls block">
+        <div class="section-head block-head">
+          <h2 id="panelTitle"></h2>
+          <span class="section-actions">
+          <button id="prevPanelBtn" type="button" class="btn icon-btn" data-icon="chevron-left" data-i18n-title="prevPanel" data-i18n-aria="prevPanel"></button>
+          <button id="nextPanelBtn" type="button" class="btn icon-btn" data-icon="chevron-right" data-i18n-title="nextPanel" data-i18n-aria="nextPanel"></button>
+            <button type="button" class="btn icon-btn collapse-btn" data-collapse="panelEditor" aria-expanded="true"></button>
+          </span>
+        </div>
+        <div class="block-body">
 
       <div class="section grow">
         <label class="section-title" for="description"><span class="icon-slot small" data-icon="type"></span><span data-i18n="sceneLabel"></span></label>
@@ -140,75 +223,9 @@
         <div id="versions" class="versions"></div>
         <p id="noVersions" class="hint" data-i18n="noVersions"></p>
       </div>
-    </aside>
-
-    <section class="stage">
-      <div class="page-bar glass">
-        <label class="opt" data-i18n-title="formatLabel">
-          <span class="icon-slot small" data-icon="book-open"></span>
-          <select id="format" class="field compact" data-i18n-aria="formatLabel">
-            <option value="bd" data-i18n="formatBd"></option>
-            <option value="comics" data-i18n="formatComics"></option>
-            <option value="manga" data-i18n="formatManga"></option>
-            <option value="webtoon" data-i18n="formatWebtoon"></option>
-          </select>
-        </label>
-        <span class="bar-sep"></span>
-        <div id="modes" class="tools" role="toolbar">
-          <button type="button" data-mode="layout" data-icon="mouse-pointer-2" data-i18n="modeLayout"></button>
-          <button type="button" data-mode="frame" data-icon="move" data-i18n="modeFrame"></button>
         </div>
-        <span class="bar-sep"></span>
-        <button id="splitColsBtn" type="button" class="btn icon-btn" data-icon="columns-2" data-i18n-title="splitCols" data-i18n-aria="splitCols"></button>
-        <button id="splitRowsBtn" type="button" class="btn icon-btn" data-icon="rows-2" data-i18n-title="splitRows" data-i18n-aria="splitRows"></button>
-        <button id="removePanelBtn" type="button" class="btn icon-btn" data-icon="trash-2" data-i18n-title="removePanel" data-i18n-aria="removePanel"></button>
-        <div class="project-box">
-          <button id="templateBtn" type="button" class="btn small" data-icon="layout-grid" data-i18n="templates" aria-expanded="false"></button>
-          <div id="templateMenu" class="menu template-menu" hidden></div>
-        </div>
-        <span class="spacer"></span>
-        <label id="stripHeightBox" class="opt" hidden><span data-i18n="stripHeight"></span>
-          <input id="stripHeight" class="field num" type="number" min="400" max="20000" step="100"></label>
-        <span id="pageNav" class="page-nav">
-          <button id="prevPageBtn" type="button" class="btn icon-btn" data-icon="chevron-left" data-i18n-title="prevPage" data-i18n-aria="prevPage"></button>
-          <span id="pageInfo" class="frame-info"></span>
-          <button id="nextPageBtn" type="button" class="btn icon-btn" data-icon="chevron-right" data-i18n-title="nextPage" data-i18n-aria="nextPage"></button>
-        </span>
-      </div>
-
-      <div id="viewport" class="viewport"></div>
-      <p id="status" class="status" role="status"></p>
-    </section>
-
-    <aside class="panel glass context">
-      <div class="context-head">
-        <h2 data-i18n="pages"></h2>
-        <span id="pageCount" class="muted"></span>
-      </div>
-      <div id="pageList" class="page-list"></div>
-      <div class="row">
-        <button id="addPageBtn" type="button" class="btn dashed grow-btn" data-icon="file-plus" data-i18n="addPage"></button>
-        <button id="removePageBtn" type="button" class="btn icon-btn" data-icon="trash-2" data-i18n-title="removePage" data-i18n-aria="removePage"></button>
-      </div>
-
-      <div class="context-head">
-        <h2 data-i18n="library"></h2>
-        <span id="libraryCount" class="muted"></span>
-      </div>
-      <p class="hint" data-i18n="libraryHint"></p>
-      <button id="uploadBtn" type="button" class="btn dashed" data-icon="upload" data-i18n="loadImages"></button>
-      <input id="fileInput" type="file" accept="image/*" multiple hidden>
-      <div id="library" class="gallery"></div>
-
-      <details class="story">
-        <summary class="section-title"><span class="icon-slot small" data-icon="book"></span><span data-i18n="story"></span></summary>
-        <label class="stack"><span data-i18n="styleLabel"></span>
-          <textarea id="projectStyle" class="field" rows="3" data-i18n-placeholder="stylePlaceholder"></textarea></label>
-        <label class="stack"><span data-i18n="synopsisLabel"></span>
-          <textarea id="synopsis" class="field" rows="4" data-i18n-placeholder="synopsisPlaceholder"></textarea></label>
-      </details>
-    </aside>
-  </main>
+      </section>
+  </div>
 
   <!-- Chaîne de modèles : LLM et enhancer facultatifs, puis le modèle de diffusion -->
   <section id="chain" class="chain" data-i18n-aria="pipeline">
@@ -227,7 +244,6 @@
         <label class="line"><span data-i18n="contextTexts"></span><input id="contextTexts" class="field num" type="number" min="0" max="30" value="6"></label>
       </div>
     </div>
-    <div class="wire"></div>
     <div id="nodePe" class="node">
       <div class="node-row">
         <span class="node-tag" data-i18n="peTag"></span>
@@ -235,7 +251,6 @@
         <select id="peModel" class="field" data-i18n-aria="peLabel"></select>
       </div>
     </div>
-    <div class="wire"></div>
     <div id="nodeModel" class="node node-model">
       <div class="node-row">
         <span class="node-tag" data-i18n="diffusionTag"></span>
@@ -267,11 +282,6 @@
           </select>
         </label>
       </div>
-    </div>
-    <div class="wire"></div>
-    <div id="nodeOutput" class="node node-output" data-i18n-title="panelOutput">
-      <span class="icon-slot large" data-icon="image"></span>
-      <span id="stepNow" class="step-now"></span>
     </div>
   </section>
 
