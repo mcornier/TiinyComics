@@ -11,6 +11,7 @@
   <div id="ambient" class="ambient" aria-hidden="true"></div>
 
   <header class="topbar glass">
+   <div class="topbar-side">
     <h1>TiinyComics</h1>
     <div class="device">
       <button id="deviceBtn" type="button" class="btn" aria-expanded="false" aria-controls="devicePanel" disabled>
@@ -35,7 +36,8 @@
       <span class="meter-track"><span id="memBar" class="meter-fill"></span></span>
       <span id="memText" class="meter-value">–</span>
     </div>
-    <span class="spacer"></span>
+   </div>
+   <div class="topbar-center">
     <div class="project-box">
       <input id="projectTitle" class="field title-field" type="text" spellcheck="false" data-i18n-placeholder="untitled" data-i18n-aria="projectTitle">
       <button id="projectBtn" type="button" class="btn" data-icon="folder-open" data-i18n="projects" aria-expanded="false"></button>
@@ -45,11 +47,14 @@
       <button id="exportBtn" type="button" class="btn" data-icon="file-down" data-i18n="export" aria-expanded="false"></button>
       <div id="exportMenu" class="menu" hidden></div>
     </div>
+   </div>
+   <div class="topbar-side end">
     <label class="btn language">
       <span class="icon-slot" data-icon="languages"></span>
       <select id="language" data-i18n-aria="language"></select>
     </label>
     <button id="connBtn" type="button" class="btn"></button>
+   </div>
   </header>
 
   <!-- Gauche : bibliothèque et histoire, repliable -->
@@ -229,6 +234,10 @@
 
   <!-- Chaîne de modèles : LLM et enhancer facultatifs, puis le modèle de diffusion -->
   <section id="chain" class="chain" data-i18n-aria="pipeline">
+    <button id="libraryDock" type="button" class="node library-dock" data-i18n-title="showLibrary" data-i18n-aria="showLibrary" tabindex="-1">
+      <span class="icon-slot" data-icon="images"></span>
+      <span id="libraryDockCount" class="dock-count"></span>
+    </button>
     <div id="nodeLlm" class="node">
       <div class="node-row">
         <span class="node-tag" data-i18n="llmTag"></span>

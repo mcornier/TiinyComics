@@ -1034,6 +1034,7 @@ function renderLibrary() {
     return thumb;
   }));
   $('libraryCount').textContent = p.library.length ? String(p.library.length) : '';
+  $('libraryDockCount').textContent = $('libraryCount').textContent;
 }
 
 /* ---------- Menus du haut ---------- */
@@ -1498,12 +1499,14 @@ function renderCollapsibles() {
     const closed = !!collapsed[id];
     $(id).classList.toggle('collapsed', closed);
     const side = id === 'libraryPanel';
-    btn.innerHTML = iconSvg(side ? (closed ? 'panel-left-open' : 'panel-left-close') : (closed ? 'chevron-down' : 'chevron-up'));
+    btn.innerHTML = iconSvg(side ? 'panel-left-close' : (closed ? 'chevron-down' : 'chevron-up'));
     btn.setAttribute('aria-expanded', String(!closed));
     btn.title = t(closed ? 'expandBlock' : 'collapseBlock');
     btn.setAttribute('aria-label', btn.title);
   }
   document.body.classList.toggle('library-collapsed', !!collapsed.libraryPanel);
+  $('libraryDock').tabIndex = collapsed.libraryPanel ? 0 : -1;
+  $('libraryPanel').inert = !!collapsed.libraryPanel;
 }
 
 function bindCollapsibles() {
@@ -1515,6 +1518,11 @@ function bindCollapsibles() {
       saveSettings();
     });
   }
+  $('libraryDock').addEventListener('click', () => {
+    (state.settings.collapsed ||= {}).libraryPanel = false;
+    renderCollapsibles();
+    saveSettings();
+  });
   const observer = new ResizeObserver(measureBars);
   observer.observe(document.querySelector('.topbar'));
   observer.observe($('chain'));
