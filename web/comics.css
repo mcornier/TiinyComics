@@ -167,7 +167,6 @@ body { display: block; padding: 0; overflow: auto; }
   min-height: 100vh;
   padding: var(--top-h) calc(var(--right-w) + 2 * var(--gap)) var(--bottom-h) calc(var(--left-w) + 2 * var(--gap));
   gap: var(--gap);
-  container-type: inline-size;
 }
 /* Page ajustée : elle tient dans la fenêtre, rien ne défile. Zoomée ou webtoon : la fenêtre défile. */
 .stage:has(.viewport.fit) { height: 100vh; overflow: clip; }
@@ -277,9 +276,11 @@ body.left-collapsed .side-left, body.right-collapsed .side-right { bottom: auto;
 .page-bar .spacer { flex: 1 1 0; min-width: 0; }
 .page-bar .tools, .bar-group { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; }
 .page-bar.bar-icons #modes button span, .page-bar.bar-icons #templateBtn span, .page-bar.bar-icons .bar-label { display: none; }
-.page-bar.bar-tight .bar-sep:not(.keep), .page-bar.bar-tight #zoomLabel { display: none; }
+.page-bar.bar-tight .bar-sep:not(.keep) { display: none; }
 .page-bar.bar-tight #stripHeight { width: 70px; }
-.page-bar.bar-tiny .zoom-box, .page-bar.bar-tiny #pageInfo { display: none; }
+/* Le zoom reste toujours accessible : on retire d'abord la navigation entre pages (aussi dans le bloc Pages). */
+.page-bar.bar-tiny #pageNav { display: none; }
+.page-bar.bar-min #zoomLabel { min-width: 0; padding: 0 6px; font-size: 11px; }
 
 /* Colonne de gauche plus étroite ; repliés, ses blocs n'affichent que leur icône. */
 :root { --left-w: max(200px, 15vw); }

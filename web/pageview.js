@@ -24,6 +24,7 @@ class PageView {
     this.sketchTool = 'select';
     this.sketchSel = null;
     this.sketchHistory = new Map();
+    this.sketchRedo = new Map();
     document.addEventListener('keydown', (e) => this._sketchKey(e));
     this.project = null;
     this.pageIndex = 0;
@@ -42,22 +43,16 @@ class PageView {
     }, { passive: false });
   }
 
-  // Double-clic sur une case : zoom pour qu'elle remplisse la zone visible, centrée ; un second double-clic
-  // sur la même case revient au zoom et à la position d'avant.
-  toggleFocus(panelId) {
-    if (this.focus?.panelId === panelId) {
-      const { zoom, scrollX, scrollY } = this.focus;
-      this.focus = null;
-      this.setZoom(zoom);
-      window.scrollTo(scrollX, scrollY);
-      return;
-    }
+  // Double-clic sur une case : zoom pour qu'elle remplisse la zone visible, centrée. On dézoome avec les
+  // boutons de zoom (le pourcentage remet la page ajustée).
+  focusPanel(panelId) {
+    if (this.focus?.panelId === panelId) return;
     const cell = this.el.querySelector(`.cell[data-panel-id="${panelId}"]`);
     if (!cell) return;
     const area = this._visibleArea();
     const box = cell.getBoundingClientRect();
     const factor = Math.min((area.right - area.left) * 0.94 / box.width, (area.bottom - area.top) * 0.94 / box.height);
-    this.focus = this.focus ? { ...this.focus, panelId } : { panelId, zoom: this.zoom, scrollX: window.scrollX, scrollY: window.scrollY };
+    this.focus = { panelId };
     this.setZoom(this.zoom * factor);
     const after = this.el.querySelector(`.cell[data-panel-id="${panelId}"]`)?.getBoundingClientRect();
     if (!after) return;
@@ -79,6 +74,7 @@ class PageView {
     this.zoom = PV.clamp(zoom, 0.25, 8);
     if (Math.abs(this.zoom - 1) < 0.03) this.zoom = 1;
     this.refresh();
+    if (this.zoom === 1 && !this.webtoon) window.scrollTo(0, 0);
     this.onZoom?.(this.zoom);
   }
 
@@ -236,6 +232,8 @@ class PageView {
     cell.addEventListener('wheel', (e) => this._cellWheel(e, panel), { passive: false });
     cell.addEventListener('dblclick', (e) => {
       if (this.mode === 'sketch' && panel.id === this.selectedId) {
+        // Pendant le dessin, deux traits rapides font un double-clic : on l'ignore.
+        if (this.sketchTool !== 'select') return;
         const box = cell.getBoundingClientRect();
         const hit = ComicSketch.hitTest(panel.sketch?.items || [], e.clientX - box.left, e.clientY - box.top, box.width, box.height);
         if (hit && hit.type !== 'stroke') {
@@ -249,7 +247,7 @@ class PageView {
         this.onChange('placement');
         return;
       }
-      this.toggleFocus(panel.id);
+      this.focusPanel(panel.id);
     });
     return cell;
   }
@@ -403,7 +401,30 @@ class PageView {
   _sketchCommit(panel, before) {
     if (JSON.stringify(panel.sketch.items) === before) return;
     this._sketchHistoryOf(panel).push(before);
+    this.sketchRedo.set(panel.id, []);
     this.onChange('sketch');
+  }
+
+  // Annuler / rétablir sur le croquis de la case sélectionnée (historique de la session).
+  sketchUndo() { return this._sketchStep(true); }
+
+  sketchRedo_() { return this._sketchStep(false); }
+
+  _sketchStep(undo) {
+    const panel = this.project && PV.locatePanel(this.project, this.selectedId)?.panel;
+    if (!panel) return false;
+    panel.sketch ||= { items: [], use: true };
+    const from = undo ? this._sketchHistoryOf(panel) : (this.sketchRedo.get(panel.id) || []);
+    const to = undo ? (this.sketchRedo.get(panel.id) || []) : this._sketchHistoryOf(panel);
+    const target = from.pop();
+    if (target === undefined) return false;
+    to.push(JSON.stringify(panel.sketch.items || []));
+    if (undo) this.sketchRedo.set(panel.id, to);
+    panel.sketch.items = JSON.parse(target);
+    this.sketchSel = null;
+    this.onChange('sketch');
+    this.refresh();
+    return true;
   }
 
   _sketchDown(e, panel, rect, scale, cell) {
@@ -554,7 +575,18 @@ class PageView {
 
   _sketchKey(e) {
     if (this.mode !== 'sketch' || !this.project || this.drag) return;
-    if (e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+    if (e.target.closest?.('input:not([type="checkbox"]):not([type="button"]), textarea, [contenteditable]')) return;
+    const key = e.key.toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && (key === 'y' || (key === 'z' && e.shiftKey))) {
+      e.preventDefault();
+      this.sketchRedo_();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && key === 'z') {
+      e.preventDefault();
+      this.sketchUndo();
+      return;
+    }
     const panel = PV.locatePanel(this.project, this.selectedId)?.panel;
     if (!panel?.sketch?.items) return;
     const items = panel.sketch.items;
@@ -566,14 +598,6 @@ class PageView {
       items.splice(i, 1);
       this.sketchSel = null;
       this._sketchCommit(panel, before);
-      this.refresh();
-    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-      const previous = this._sketchHistoryOf(panel).pop();
-      if (!previous) return;
-      e.preventDefault();
-      panel.sketch.items = JSON.parse(previous);
-      this.sketchSel = null;
-      this.onChange('sketch');
       this.refresh();
     } else if (e.key === 'Escape' && this.sketchSel) {
       this.sketchSel = null;

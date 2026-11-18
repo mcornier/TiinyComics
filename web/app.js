@@ -1347,7 +1347,7 @@ function renderLayoutButtons() {
 const MODE_HINTS = { layout: 'modeLayoutHint', frame: 'modeFrameHint', sketch: 'modeSketchHint' };
 
 // Barre de page : on retire les libellés, puis les éléments secondaires, tant qu'elle déborde.
-const BAR_LEVELS = ['bar-icons', 'bar-tight', 'bar-tiny'];
+const BAR_LEVELS = ['bar-icons', 'bar-tight', 'bar-tiny', 'bar-min'];
 function fitPageBar() {
   const bar = document.querySelector('.page-bar');
   bar.classList.remove(...BAR_LEVELS);
@@ -1371,7 +1371,7 @@ function setMode(mode) {
 function setSketchTool(tool) {
   state.sketchTool = tool;
   pageView.sketchTool = tool;
-  for (const x of $('sketchTools').children) x.setAttribute('aria-pressed', String(x.dataset.tool === tool));
+  for (const x of $('sketchTools').querySelectorAll('[data-tool]')) x.setAttribute('aria-pressed', String(x.dataset.tool === tool));
   setStatus(t(`toolHint_${tool}`));
 }
 
@@ -1392,6 +1392,7 @@ function clearSketch() {
   const panel = selectedPanel()?.panel;
   if (!panel?.sketch?.items?.length || !window.confirm(t('confirmSketchClear'))) return;
   pageView._sketchHistoryOf(panel).push(JSON.stringify(panel.sketch.items));
+  pageView.sketchRedo.set(panel.id, []);
   panel.sketch.items = [];
   pageView.sketchSel = null;
   touch();
@@ -1814,7 +1815,9 @@ function bindEvents() {
   // Page
   $('format').addEventListener('change', () => setFormat($('format').value));
   for (const b of $('modes').children) b.addEventListener('click', () => setMode(b.dataset.mode));
-  for (const b of $('sketchTools').children) b.addEventListener('click', () => setSketchTool(b.dataset.tool));
+  for (const b of $('sketchTools').querySelectorAll('[data-tool]')) b.addEventListener('click', () => setSketchTool(b.dataset.tool));
+  $('sketchUndoBtn').addEventListener('click', () => { if (!pageView.sketchUndo()) setStatus(t('nothingToUndo')); });
+  $('sketchRedoBtn').addEventListener('click', () => { if (!pageView.sketchRedo_()) setStatus(t('nothingToRedo')); });
   $('sketchDrawBtn').addEventListener('click', () => setMode('sketch'));
   $('sketchClearBtn').addEventListener('click', clearSketch);
   $('sketchUse').addEventListener('change', () => {
