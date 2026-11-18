@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TiinyComics</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="comics.css">
+</head>
+<body>
+  <div id="ambient" class="ambient" aria-hidden="true"></div>
+
+  <header class="topbar glass">
+    <h1>TiinyComics</h1>
+    <div class="device">
+      <button id="deviceBtn" type="button" class="btn" aria-expanded="false" aria-controls="devicePanel" disabled>
+        <span id="connDot" class="dot" aria-hidden="true"></span>
+        <span class="icon-slot" data-icon="cpu"></span>
+        <span id="connText"></span>
+        <span class="icon-slot small" data-icon="chevron-down"></span>
+      </button>
+      <div id="devicePanel" class="device-panel" hidden>
+        <p class="panel-title" data-i18n="models"></p>
+        <div id="modelList" class="model-list"></div>
+        <p class="hint" data-i18n="modelsHint"></p>
+      </div>
+    </div>
+    <div class="meter">
+      <span class="meter-label">NPU</span>
+      <span class="meter-track"><span id="npuBar" class="meter-fill"></span></span>
+      <span id="npuText" class="meter-value">–</span>
+    </div>
+    <div class="meter">
+      <span class="meter-label" data-i18n="memory"></span>
+      <span class="meter-track"><span id="memBar" class="meter-fill"></span></span>
+      <span id="memText" class="meter-value">–</span>
+    </div>
+    <span class="spacer"></span>
+    <div class="project-box">
+      <input id="projectTitle" class="field title-field" type="text" spellcheck="false" data-i18n-placeholder="untitled" data-i18n-aria="projectTitle">
+      <button id="projectBtn" type="button" class="btn" data-icon="folder-open" data-i18n="projects" aria-expanded="false"></button>
+      <div id="projectMenu" class="menu" hidden></div>
+    </div>
+    <div class="project-box">
+      <button id="exportBtn" type="button" class="btn" data-icon="file-down" data-i18n="export" aria-expanded="false"></button>
+      <div id="exportMenu" class="menu" hidden></div>
+    </div>
+    <label class="btn language">
+      <span class="icon-slot" data-icon="languages"></span>
+      <select id="language" data-i18n-aria="language"></select>
+    </label>
+    <button id="connBtn" type="button" class="btn"></button>
+  </header>
+
+  <main class="layout">
+    <!-- Case sélectionnée : description, références, contexte, rendu -->
+    <aside id="panelEditor" class="panel glass controls">
+      <div class="section-head">
+        <h2 id="panelTitle"></h2>
+        <span class="section-actions">
+          <button id="prevPanelBtn" type="button" class="btn icon-btn" data-icon="chevron-left" data-i18n-title="prevPanel" data-i18n-aria="prevPanel"></button>
+          <button id="nextPanelBtn" type="button" class="btn icon-btn" data-icon="chevron-right" data-i18n-title="nextPanel" data-i18n-aria="nextPanel"></button>
+        </span>
+      </div>
+
+      <div class="section grow">
+        <label class="section-title" for="description"><span class="icon-slot small" data-icon="type"></span><span data-i18n="sceneLabel"></span></label>
+        <textarea id="description" class="field" data-i18n-placeholder="scenePlaceholder"></textarea>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <span class="section-title"><span class="icon-slot small" data-icon="wand-sparkles"></span><span data-i18n="finalPrompt"></span></span>
+          <span class="section-actions">
+            <button id="clearEnhancedBtn" type="button" class="btn icon-btn" data-icon="x" data-i18n-title="clearEnhanced" data-i18n-aria="clearEnhanced" hidden></button>
+            <button id="enhanceBtn" type="button" class="btn small" data-icon="sparkles" data-i18n="enhance"></button>
+          </span>
+        </div>
+        <textarea id="enhanced" class="field enhanced" data-i18n-placeholder="enhancedPlaceholder" hidden></textarea>
+        <p id="enhanceHint" class="hint" data-i18n="enhanceHint"></p>
+        <details id="thinkingBox" hidden>
+          <summary id="thinkingSummary"></summary>
+          <pre id="thinking" class="scroll-text"></pre>
+        </details>
+      </div>
+
+      <div class="section">
+        <p class="section-title"><span class="icon-slot small" data-icon="image"></span><span data-i18n="panelRefs"></span></p>
+        <div id="panelRefs" class="refs"></div>
+        <p id="noPanelRefs" class="hint" data-i18n="noPanelRefs"></p>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <span class="section-title"><span class="icon-slot small" data-icon="layers"></span><span data-i18n="contextLabel"></span></span>
+          <label class="opt"><span data-i18n="contextImagesCount"></span>
+            <input id="contextImages" class="field num tiny" type="number" min="0" max="8" value="2"></label>
+        </div>
+        <div id="contextStrip" class="refs context-strip"></div>
+        <p id="contextHint" class="hint"></p>
+      </div>
+
+      <div class="section">
+        <p class="section-title"><span class="icon-slot small" data-icon="maximize-2"></span><span data-i18n="quality"></span></p>
+        <div id="presets" class="pills">
+          <button type="button" class="pill" data-preset="draft" data-i18n="presetDraft"></button>
+          <button type="button" class="pill" data-preset="mp1">1 MP</button>
+          <button type="button" class="pill" data-preset="mp2">2 MP</button>
+          <button type="button" class="pill" data-preset="mp4">4 MP</button>
+        </div>
+        <p id="sizeHint" class="hint"></p>
+      </div>
+
+      <div class="seed-row">
+        <span class="section-title"><span class="icon-slot small" data-icon="dices"></span><span data-i18n="seed"></span></span>
+        <span class="seed-controls">
+          <span id="seedAuto" class="muted small-text" data-i18n="seedAuto"></span>
+          <input id="seed" class="field seed-input" type="number" min="0" value="42" data-i18n-aria="seed" hidden>
+          <button id="seedBtn" type="button" class="btn icon-btn" data-icon="dices"></button>
+        </span>
+      </div>
+
+      <button id="generateBtn" type="button" class="btn primary" data-icon="play" data-i18n="generate"></button>
+      <button id="stopBtn" type="button" class="btn danger" data-icon="square" data-i18n="stop" hidden></button>
+
+      <div class="section">
+        <p class="section-title"><span class="icon-slot small" data-icon="scaling"></span><span data-i18n="improve"></span></p>
+        <div class="row wrap">
+          <span class="muted small-text" data-i18n="upscaleTo"></span>
+          <button type="button" class="btn small" data-upscale="mp1">1 MP</button>
+          <button type="button" class="btn small" data-upscale="mp2">2 MP</button>
+          <button type="button" class="btn small" data-upscale="mp4">4 MP</button>
+        </div>
+        <button id="extendBtn" type="button" class="btn small" data-icon="expand" data-i18n="extend"></button>
+        <p id="improveHint" class="hint"></p>
+      </div>
+
+      <div class="section">
+        <p class="section-title"><span class="icon-slot small" data-icon="history"></span><span data-i18n="versions"></span> <span id="versionCount" class="muted"></span></p>
+        <div id="versions" class="versions"></div>
+        <p id="noVersions" class="hint" data-i18n="noVersions"></p>
+      </div>
+    </aside>
+
+    <section class="stage">
+      <div class="page-bar glass">
+        <label class="opt" data-i18n-title="formatLabel">
+          <span class="icon-slot small" data-icon="book-open"></span>
+          <select id="format" class="field compact" data-i18n-aria="formatLabel">
+            <option value="bd" data-i18n="formatBd"></option>
+            <option value="comics" data-i18n="formatComics"></option>
+            <option value="manga" data-i18n="formatManga"></option>
+            <option value="webtoon" data-i18n="formatWebtoon"></option>
+          </select>
+        </label>
+        <span class="bar-sep"></span>
+        <div id="modes" class="tools" role="toolbar">
+          <button type="button" data-mode="layout" data-icon="mouse-pointer-2" data-i18n="modeLayout"></button>
+          <button type="button" data-mode="frame" data-icon="move" data-i18n="modeFrame"></button>
+        </div>
+        <span class="bar-sep"></span>
+        <button id="splitColsBtn" type="button" class="btn icon-btn" data-icon="columns-2" data-i18n-title="splitCols" data-i18n-aria="splitCols"></button>
+        <button id="splitRowsBtn" type="button" class="btn icon-btn" data-icon="rows-2" data-i18n-title="splitRows" data-i18n-aria="splitRows"></button>
+        <button id="removePanelBtn" type="button" class="btn icon-btn" data-icon="trash-2" data-i18n-title="removePanel" data-i18n-aria="removePanel"></button>
+        <div class="project-box">
+          <button id="templateBtn" type="button" class="btn small" data-icon="layout-grid" data-i18n="templates" aria-expanded="false"></button>
+          <div id="templateMenu" class="menu template-menu" hidden></div>
+        </div>
+        <span class="spacer"></span>
+        <label id="stripHeightBox" class="opt" hidden><span data-i18n="stripHeight"></span>
+          <input id="stripHeight" class="field num" type="number" min="400" max="20000" step="100"></label>
+        <span id="pageNav" class="page-nav">
+          <button id="prevPageBtn" type="button" class="btn icon-btn" data-icon="chevron-left" data-i18n-title="prevPage" data-i18n-aria="prevPage"></button>
+          <span id="pageInfo" class="frame-info"></span>
+          <button id="nextPageBtn" type="button" class="btn icon-btn" data-icon="chevron-right" data-i18n-title="nextPage" data-i18n-aria="nextPage"></button>
+        </span>
+      </div>
+
+      <div id="viewport" class="viewport"></div>
+      <p id="status" class="status" role="status"></p>
+    </section>
+
+    <aside class="panel glass context">
+      <div class="context-head">
+        <h2 data-i18n="pages"></h2>
+        <span id="pageCount" class="muted"></span>
+      </div>
+      <div id="pageList" class="page-list"></div>
+      <div class="row">
+        <button id="addPageBtn" type="button" class="btn dashed grow-btn" data-icon="file-plus" data-i18n="addPage"></button>
+        <button id="removePageBtn" type="button" class="btn icon-btn" data-icon="trash-2" data-i18n-title="removePage" data-i18n-aria="removePage"></button>
+      </div>
+
+      <div class="context-head">
+        <h2 data-i18n="library"></h2>
+        <span id="libraryCount" class="muted"></span>
+      </div>
+      <p class="hint" data-i18n="libraryHint"></p>
+      <button id="uploadBtn" type="button" class="btn dashed" data-icon="upload" data-i18n="loadImages"></button>
+      <input id="fileInput" type="file" accept="image/*" multiple hidden>
+      <div id="library" class="gallery"></div>
+
+      <details class="story">
+        <summary class="section-title"><span class="icon-slot small" data-icon="book"></span><span data-i18n="story"></span></summary>
+        <label class="stack"><span data-i18n="styleLabel"></span>
+          <textarea id="projectStyle" class="field" rows="3" data-i18n-placeholder="stylePlaceholder"></textarea></label>
+        <label class="stack"><span data-i18n="synopsisLabel"></span>
+          <textarea id="synopsis" class="field" rows="4" data-i18n-placeholder="synopsisPlaceholder"></textarea></label>
+      </details>
+    </aside>
+  </main>
+
+  <!-- Chaîne de modèles : LLM et enhancer facultatifs, puis le modèle de diffusion -->
+  <section id="chain" class="chain" data-i18n-aria="pipeline">
+    <div id="nodeLlm" class="node">
+      <div class="node-row">
+        <span class="node-tag" data-i18n="llmTag"></span>
+        <span class="icon-slot" data-icon="brain"></span>
+        <select id="llmModel" class="field" data-i18n-aria="llmLabel"></select>
+        <button id="llmToggle" type="button" class="btn icon-btn expand" aria-expanded="false" data-i18n-aria="llmSettings"></button>
+      </div>
+      <div id="llmBody" class="node-body" hidden>
+        <p class="hint" data-i18n="llmHint"></p>
+        <label class="line"><span data-i18n="temperature"></span><input id="temperature" class="field num" type="number" min="0" max="2" step="0.05" value="1"></label>
+        <label class="line"><span data-i18n="topP"></span><input id="topP" class="field num" type="number" min="0" max="1" step="0.01" value="0.95"></label>
+        <label class="line"><span data-i18n="topK"></span><input id="topK" class="field num" type="number" min="1" max="200" value="20"></label>
+        <label class="line"><span data-i18n="contextTexts"></span><input id="contextTexts" class="field num" type="number" min="0" max="30" value="6"></label>
+      </div>
+    </div>
+    <div class="wire"></div>
+    <div id="nodePe" class="node">
+      <div class="node-row">
+        <span class="node-tag" data-i18n="peTag"></span>
+        <span class="icon-slot" data-icon="sparkles"></span>
+        <select id="peModel" class="field" data-i18n-aria="peLabel"></select>
+      </div>
+    </div>
+    <div class="wire"></div>
+    <div id="nodeModel" class="node node-model">
+      <div class="node-row">
+        <span class="node-tag" data-i18n="diffusionTag"></span>
+        <span class="icon-slot" data-icon="box"></span>
+        <select id="imageModel" class="field" data-i18n-aria="imageModel"></select>
+        <button id="modelToggle" type="button" class="btn icon-btn expand" aria-expanded="false" data-i18n-aria="modelSettings"></button>
+      </div>
+      <div id="modelBody" class="node-body" hidden>
+        <label class="line"><span data-i18n="steps"></span><input id="steps" class="field num" type="number" min="1" max="100" value="40"></label>
+        <label class="line"><span data-i18n="draftSteps"></span><input id="draftSteps" class="field num" type="number" min="1" max="100" value="20"></label>
+        <label class="line"><span data-i18n="scheduler"></span>
+          <select id="scheduler" class="field">
+            <option value="" data-i18n="schedulerDefault"></option>
+            <option value="euler">euler</option>
+            <option value="euler_ancestral_rf">euler_ancestral_rf</option>
+            <option value="unipc_flow">unipc_flow</option>
+          </select>
+        </label>
+        <label class="line"><span data-i18n="guidance"></span><input id="guidance" class="field num" type="number" min="0" max="20" step="0.1" value="1"></label>
+        <label class="stack"><span data-i18n="negative"></span><input id="negative" class="field" type="text"></label>
+        <p class="hint" data-i18n="negativeHint"></p>
+        <label class="line"><span data-i18n="previewLabel"></span>
+          <select id="previewMode" class="field">
+            <option value="0" data-i18n="previewOff"></option>
+            <option value="8">1/8</option>
+            <option value="4">1/4</option>
+            <option value="2">1/2</option>
+            <option value="1">1</option>
+          </select>
+        </label>
+      </div>
+    </div>
+    <div class="wire"></div>
+    <div id="nodeOutput" class="node node-output" data-i18n-title="panelOutput">
+      <span class="icon-slot large" data-icon="image"></span>
+      <span id="stepNow" class="step-now"></span>
+    </div>
+  </section>
+
+  <div id="pickerMenu" class="picker-menu" hidden></div>
+  <div id="refMenu" class="menu ref-menu" hidden></div>
+
+  <dialog id="settings">
+    <form method="dialog" id="settingsForm">
+      <h2 data-i18n="settingsTitle"></h2>
+      <div class="dialog-field">
+        <label for="baseUrl" data-i18n="address"></label>
+        <input id="baseUrl" class="field" type="text" placeholder="http://tiinyhost.local" spellcheck="false" required>
+        <p class="hint" data-i18n="addressHint"></p>
+      </div>
+      <div class="dialog-field">
+        <label for="apiKey" data-i18n="apiKey"></label>
+        <input id="apiKey" class="field" type="password" autocomplete="off" spellcheck="false" required>
+        <p class="hint" data-i18n="apiKeyHint"></p>
+      </div>
+      <p id="settingsError" class="error" role="alert"></p>
+      <div class="row end">
+        <button type="button" id="settingsCancel" class="btn" data-i18n="cancel"></button>
+        <button type="submit" class="btn primary" value="save" data-i18n="connect"></button>
+      </div>
+    </form>
+  </dialog>
+
+  <input id="projectFileInput" type="file" accept=".tiinycomic,application/json" hidden>
+
+  <script src="prompts.js"></script>
+  <script src="i18n.js"></script>
+  <script src="i18n-comics.js"></script>
+  <script src="icons.js"></script>
+  <script src="api.js"></script>
+  <script src="project.js"></script>
+  <script src="store.js"></script>
+  <script src="editor.js"></script>
+  <script src="generate.js"></script>
+  <script src="export.js"></script>
+  <script src="pageview.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
