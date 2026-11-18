@@ -277,7 +277,7 @@ body.left-collapsed .side-left, body.right-collapsed .side-right { bottom: auto;
 body.left-collapsed .page-bar-wrap { margin-left: calc(var(--left-w) + var(--gap)); }
 body.right-collapsed .page-bar-wrap { margin-right: calc(var(--right-w) + var(--gap)); }
 .page-bar.bar-icons #modes button span, .page-bar.bar-icons #templateBtn span, .page-bar.bar-icons .bar-label { display: none; }
-.page-bar.bar-tight .bar-sep, .page-bar.bar-tight #zoomLabel { display: none; }
+.page-bar.bar-tight .bar-sep:not(.keep), .page-bar.bar-tight #zoomLabel { display: none; }
 .page-bar.bar-tight #stripHeight { width: 70px; }
 .page-bar.bar-tiny .zoom-box, .page-bar.bar-tiny #pageInfo { display: none; }
 
