@@ -8,10 +8,10 @@
 // bd : album franco-belge 24 × 32 cm à 100 px/cm. comics : 6,625 × 10,25 in à 300 dpi.
 // manga : tankōbon B6 (128 × 182 mm), lu de droite à gauche. webtoon : bandes de 800 px, hauteur libre.
 const FORMATS = {
-  bd: { width: 2400, height: 3200, margin: 110, gutter: 44, rtl: false, scroll: false },
-  comics: { width: 1988, height: 3075, margin: 96, gutter: 40, rtl: false, scroll: false },
-  manga: { width: 1500, height: 2133, margin: 80, gutter: 36, rtl: true, scroll: false },
-  webtoon: { width: 800, height: 2400, margin: 0, gutter: 80, rtl: false, scroll: true },
+  bd: { width: 2400, height: 3200, margin: 110, gutter: 44, border: 6, rtl: false, scroll: false },
+  comics: { width: 1988, height: 3075, margin: 96, gutter: 40, border: 6, rtl: false, scroll: false },
+  manga: { width: 1500, height: 2133, margin: 80, gutter: 36, border: 4, rtl: true, scroll: false },
+  webtoon: { width: 800, height: 2400, margin: 0, gutter: 80, border: 0, rtl: false, scroll: true },
 };
 const FORMAT_IDS = Object.keys(FORMATS);
 const WEBTOON_MIN_HEIGHT = 400;
@@ -35,6 +35,8 @@ function pageSpacing(project) {
   return {
     margin: project.margin ?? f.margin,
     gutter: project.gutter ?? f.gutter,
+    // Trait noir autour des cases, en unités de page (0 : pas de trait, l'usage en webtoon).
+    border: project.border ?? f.border,
   };
 }
 

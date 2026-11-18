@@ -27,7 +27,7 @@ Project {
   id, version: 1, title, format: 'bd' | 'comics' | 'manga' | 'webtoon',
   style,      // global style prompt, prepended to every render
   synopsis,   // story context for the LLM
-  margin?, gutter?,           // override the format defaults, in page units
+  margin?, gutter?, border?,  // override the format defaults, in page units (border: black panel outline width)
   library: [{ assetId, name }],  // project reference images (characters, places)
   pages: [Page], createdAt, updatedAt
 }
