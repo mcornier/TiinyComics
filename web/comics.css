@@ -269,13 +269,13 @@ body.left-collapsed .side-left, body.right-collapsed .side-right { bottom: auto;
 }
 
 /* Barre de page : sa propre largeur décide du passage en icônes ; elle ne passe jamais sur deux lignes. */
-.page-bar-wrap { position: sticky; top: var(--top-h); z-index: 10; flex: none; align-self: stretch; min-width: 0; container-type: inline-size; }
+.page-bar-wrap { position: fixed; top: var(--top-h); left: calc(var(--left-w) + 2 * var(--gap)); right: calc(var(--right-w) + 2 * var(--gap)); z-index: 10; min-width: 0; }
+/* La barre est fixe : la zone de page commence sous elle. */
+@media (min-width: 1101px) { .stage { padding-top: calc(var(--top-h) + 44px + var(--gap)); } }
 .page-bar-wrap .page-bar { position: static; width: 100%; }
 .page-bar > *, .page-bar .tools, .bar-group { flex: none; }
 .page-bar .spacer { flex: 1 1 0; min-width: 0; }
 .page-bar .tools, .bar-group { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; }
-body.left-collapsed .page-bar-wrap { margin-left: calc(var(--left-w) + var(--gap)); }
-body.right-collapsed .page-bar-wrap { margin-right: calc(var(--right-w) + var(--gap)); }
 .page-bar.bar-icons #modes button span, .page-bar.bar-icons #templateBtn span, .page-bar.bar-icons .bar-label { display: none; }
 .page-bar.bar-tight .bar-sep:not(.keep), .page-bar.bar-tight #zoomLabel { display: none; }
 .page-bar.bar-tight #stripHeight { width: 70px; }
@@ -308,3 +308,5 @@ body.right-collapsed .page-bar-wrap { margin-right: calc(var(--right-w) + var(--
 
 /* Stylet et tactile : sur ces zones, un glissé dessine, cadre ou redimensionne au lieu de faire défiler la page. */
 .mode-sketch .cell.sketching, .mode-frame .cell.selected, .divider, .strip-handle { touch-action: none; }
+/* Zoom sur une case : marge autour de la page pour pouvoir centrer n'importe quelle case. */
+.viewport.focused { padding: 45vh 45vw; align-self: flex-start; align-items: flex-start; width: max-content; min-width: 100%; }

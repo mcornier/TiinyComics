@@ -1975,9 +1975,9 @@ async function start() {
     onRegroup: (page, nodeId) => regroup(page, nodeId),
     onZoom: (zoom) => { $('zoomLabel').textContent = `${Math.round(zoom * 100)} %`; },
   });
-  $('zoomOutBtn').addEventListener('click', () => pageView.setZoom(pageView.zoom / 1.25));
-  $('zoomInBtn').addEventListener('click', () => pageView.setZoom(pageView.zoom * 1.25));
-  $('zoomLabel').addEventListener('click', () => pageView.setZoom(1));
+  $('zoomOutBtn').addEventListener('click', () => { pageView.focus = null; pageView.setZoom(pageView.zoom / 1.25); });
+  $('zoomInBtn').addEventListener('click', () => { pageView.focus = null; pageView.setZoom(pageView.zoom * 1.25); });
+  $('zoomLabel').addEventListener('click', () => { pageView.focus = null; pageView.setZoom(1); });
   generator = new ComicGenerator({
     getClient: () => state.client,
     store,

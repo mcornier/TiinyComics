@@ -37,12 +37,46 @@ class PageView {
     container.addEventListener('wheel', (e) => {
       if (!e.ctrlKey) return;
       e.preventDefault();
+      this.focus = null;
       this.setZoom(this.zoom * Math.exp(-e.deltaY * 0.002));
     }, { passive: false });
   }
 
+  // Double-clic sur une case : zoom pour qu'elle remplisse la zone visible, centrée ; un second double-clic
+  // sur la même case revient au zoom et à la position d'avant.
+  toggleFocus(panelId) {
+    if (this.focus?.panelId === panelId) {
+      const { zoom, scrollX, scrollY } = this.focus;
+      this.focus = null;
+      this.setZoom(zoom);
+      window.scrollTo(scrollX, scrollY);
+      return;
+    }
+    const cell = this.el.querySelector(`.cell[data-panel-id="${panelId}"]`);
+    if (!cell) return;
+    const area = this._visibleArea();
+    const box = cell.getBoundingClientRect();
+    const factor = Math.min((area.right - area.left) * 0.94 / box.width, (area.bottom - area.top) * 0.94 / box.height);
+    this.focus = this.focus ? { ...this.focus, panelId } : { panelId, zoom: this.zoom, scrollX: window.scrollX, scrollY: window.scrollY };
+    this.setZoom(this.zoom * factor);
+    const after = this.el.querySelector(`.cell[data-panel-id="${panelId}"]`)?.getBoundingClientRect();
+    if (!after) return;
+    window.scrollBy({
+      left: after.left + after.width / 2 - (area.left + area.right) / 2,
+      top: after.top + after.height / 2 - (area.top + area.bottom) / 2,
+    });
+  }
+
+  // Partie de la fenêtre où la page est visible : entre la barre de page, la chaîne et les colonnes latérales.
+  _visibleArea() {
+    // La barre de page couvre exactement la largeur utile ; la zone de page, elle, s'élargit pendant le zoom.
+    const bar = (document.querySelector('.page-bar-wrap') || this.el).getBoundingClientRect();
+    const bottom = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--bottom-h')) || 0;
+    return { left: Math.max(0, bar.left), right: Math.min(window.innerWidth, bar.right), top: bar.bottom + 8, bottom: window.innerHeight - bottom - 8 };
+  }
+
   setZoom(zoom) {
-    this.zoom = PV.clamp(zoom, 0.25, 6);
+    this.zoom = PV.clamp(zoom, 0.25, 8);
     if (Math.abs(this.zoom - 1) < 0.03) this.zoom = 1;
     this.refresh();
     this.onZoom?.(this.zoom);
@@ -97,6 +131,7 @@ class PageView {
     this.el.classList.toggle('webtoon', this.webtoon);
     this.el.classList.toggle('fit', !this.webtoon && this.zoom === 1);
     this.el.classList.toggle('zoomed', !this.webtoon && this.zoom !== 1);
+    this.el.classList.toggle('focused', !!this.focus);
     this.el.classList.toggle('mode-frame', this.mode === 'frame');
     this.el.classList.toggle('mode-sketch', this.mode === 'sketch');
     const scrollTop = this.el.scrollTop;
@@ -203,13 +238,18 @@ class PageView {
       if (this.mode === 'sketch' && panel.id === this.selectedId) {
         const box = cell.getBoundingClientRect();
         const hit = ComicSketch.hitTest(panel.sketch?.items || [], e.clientX - box.left, e.clientY - box.top, box.width, box.height);
-        if (hit && hit.type !== 'stroke') this._editSketchText(panel, hit);
+        if (hit && hit.type !== 'stroke') {
+          this._editSketchText(panel, hit);
+          return;
+        }
+      }
+      if (this.mode === 'frame' && panel.id === this.selectedId) {
+        panel.placement = { zoom: 1, x: 0, y: 0 };
+        this.refresh();
+        this.onChange('placement');
         return;
       }
-      if (this.mode !== 'frame' || panel.id !== this.selectedId) return;
-      panel.placement = { zoom: 1, x: 0, y: 0 };
-      this.refresh();
-      this.onChange('placement');
+      this.toggleFocus(panel.id);
     });
     return cell;
   }
