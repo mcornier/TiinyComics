@@ -257,7 +257,6 @@ class PageView {
       if (e.button !== 0 || this.mode !== 'layout') return;
       e.preventDefault();
       e.stopPropagation();
-      el.setPointerCapture(e.pointerId);
       el.classList.add('active');
       const entry = PV.findNode(page, d.splitId);
       const { gutter } = PV.pageSpacing(this.project);
@@ -272,14 +271,18 @@ class PageView {
         this.refresh();
         this.el.querySelectorAll('.divider').forEach((n) => n.classList.toggle('active', n.dataset.key === `${d.splitId}:${d.index}`));
       };
+      // Écoute sur la fenêtre : chaque mouvement redessine la page et remplace cette poignée,
+      // qui perdrait sinon la capture du pointeur après le premier déplacement.
       const up = () => {
-        el.removeEventListener('pointermove', move);
-        el.removeEventListener('pointerup', up);
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        window.removeEventListener('pointercancel', up);
         this.refresh();
         this.onChange('layout');
       };
-      el.addEventListener('pointermove', move);
-      el.addEventListener('pointerup', up);
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+      window.addEventListener('pointercancel', up);
     });
     el.dataset.key = `${d.splitId}:${d.index}`;
     return el;
