@@ -121,7 +121,7 @@ target.refs = ['refA', 'refB'];
   assert(body.prompt.includes('Panel 1-5: scene 5. [shown in <image3>] Panel 1-6: scene 6. Panel 2-1: scene 7. [shown in <image4>]'));
   assert(body.prompt.includes('Reference images: <image1> is "Alice", <image2> is "Le chat".'));
   assert(body.prompt.includes('Keep characters, outfits and setting consistent'));
-  assert(body.prompt.endsWith('This panel: scene 8.'));
+  assert(body.prompt.includes('This panel: scene 8.\nOutput one single full-frame image'));
   assert(!body.prompt.includes('<image5>'));
   console.log(`--- prompt ---\n${body.prompt}\n--------------`);
 

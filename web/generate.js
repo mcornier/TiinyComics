@@ -53,16 +53,20 @@ Return one strictly valid JSON object and nothing else: {"rewritten_prompt": "..
         const text = sentence(p.description) || '(no description)';
         return `Panel ${p.page}-${p.panel}: ${text}${p.imageN ? ` [shown in <image${p.imageN}>]` : ''}`;
       });
-      parts.push(`Story so far (previous panels): ${lines.join(' ')}`);
+      parts.push(`Earlier panels, for continuity only (do not draw them): ${lines.join(' ')}`);
     }
     if (refs.length) {
       parts.push(`Reference images: ${refs.map((r) => `<image${r.imageN}> is ${r.name ? `"${r.name}"` : 'a reference image'}`).join(', ')}.`);
     }
     if (sketchN) parts.push(`<image${sketchN}> is a rough sketch of this panel: follow its composition and layout.`);
     if (refs.length || story.some((p) => p.imageN)) {
-      parts.push('Keep characters, outfits and setting consistent with the reference and previous panel images.');
+      parts.push('Keep characters, outfits and setting consistent with the reference and previous panel images, but use those images only as visual references: do not copy, include, tile or juxtapose them.');
     }
     if (description.trim()) parts.push(`This panel: ${sentence(description)}`);
+    // Sans cette consigne, avec des images en entrée, le modèle a déjà empilé une case précédente et la nouvelle scène.
+    if (refs.length || story.some((p) => p.imageN)) {
+      parts.push('Output one single full-frame image showing only this panel: no split, no inner borders, no other panels.');
+    }
     return parts.join('\n');
   }
 
