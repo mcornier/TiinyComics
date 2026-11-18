@@ -3,7 +3,7 @@
 .grow-btn { flex: 1; }
 .row.wrap { flex-wrap: wrap; gap: 5px; }
 .field.num.tiny { width: 58px; min-height: 30px; padding: 3px 7px; }
-.title-field { width: 220px; min-height: 34px; font-weight: 600; }
+.title-field { width: 190px; min-height: 34px; font-weight: 600; }
 .project-box { position: relative; }
 
 /* Menus déroulants (projets, export, gabarits, références) */
@@ -174,4 +174,12 @@
 
 @media (prefers-reduced-motion: reduce) {
   .cell.rendering::after { animation: none; }
+}
+
+/* La barre du haut tient sur une ligne : les jauges se resserrent avant de passer à la ligne. */
+.topbar { flex-wrap: nowrap; }
+.topbar .meter-track { width: 60px; }
+.topbar .meter-value { min-width: 54px; }
+@media (max-width: 1450px) {
+  .topbar .meter { display: none; }
 }

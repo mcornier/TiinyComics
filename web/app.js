@@ -473,6 +473,7 @@ const selectedPanel = () => (state.selectedId && P.locatePanel(project(), state.
 // Enregistrement différé : une frappe ou un glissé ne déclenche qu'une écriture.
 function touch({ now = false } = {}) {
   clearTimeout(saveTimer);
+  if (!project()) return null;
   const write = () => store.saveProject(project()).catch((err) => setStatus(t('storageLost', { e: err.message }), { error: true }));
   if (now) return write();
   saveTimer = setTimeout(write, SAVE_DELAY_MS);
