@@ -40,7 +40,7 @@ Panel  {
   versions: [Version], current: versionId | null,
   placement: { zoom, x, y },  // framing: zoom 1 = image covers the panel; x, y = centre offset as a fraction of the panel
   enhanced: string | null,    // last prompt rewritten by the LLM/PE, editable
-  sketch: null | { assetId, items: [...] }   // later phase
+  sketch: null | { items: [...], use, assetId, sig }   // vector items in panel-relative coords (web/sketch.js); assetId = last rasterized PNG, kept like every asset
 }
 Version {
   id, assetId, width, height, createdAt,
@@ -66,7 +66,7 @@ IndexedDB `tiinycomics`: store `projects` (the project JSON) and store `assets` 
 For the selected panel, the request carries, in this order and within the 10-image limit of the API:
 1. the panel's reference images,
 2. the images of the previous panels in reading order (the most recent first dropped last), so that characters and setting stay consistent,
-3. the panel's sketch when there is one (later phase).
+3. the panel's sketch when there is one. With a sketch, it goes first (`<image1>`) with a short "transform this sketch" prompt, plus the library refs; previous panels are not sent as images (tested on the Tiiny: they get copied).
 
 The prompt states the format, the project style, a short summary of the previous panels (their descriptions), then the current panel's description, and names each image as `<imageN>`.
 

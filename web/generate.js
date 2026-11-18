@@ -44,7 +44,25 @@ Return one strictly valid JSON object and nothing else: {"rewritten_prompt": "..
 
   // Prompt de rendu d'une case. `previous` : [{ page, panel, description, imageN? }] dans l'ordre de lecture ;
   // `refs` : [{ imageN, name }] ; `sketchN` : numéro de l'image du croquis. N'évoque que les images envoyées.
-  function buildPanelPrompt({ format, style = '', previous = [], refs = [], sketchN = null, description = '' }) {
+  // Case guidée par un croquis. Testé sur le Tiiny : le croquis seul, une consigne courte de transformation et la
+  // description donnent la case attendue ; avec les images des cases précédentes ou un long récit, le modèle
+  // recopie les bonshommes ou reprend le décor d'une autre case.
+  function buildSketchPrompt({ format, style = '', refs = [], sketchN, sketchNotes = [], description = '' }) {
+    const look = `${formatStyle(format)} style${style.trim() ? ` (${style.trim().replace(/[.]$/, '')})` : ''}`;
+    const parts = [`Transform <image${sketchN}>, a rough black-and-white layout sketch, into a finished, fully coloured comic panel in ${look}.`];
+    if (description.trim()) parts.push(`Scene: ${sentence(description)}`);
+    if (refs.length) {
+      parts.push(`Reference images: ${refs.map((r) => `<image${r.imageN}> is ${r.name ? `"${r.name}"` : 'a reference image'}`).join(', ')}; draw them as they look there, without copying those images.`);
+    }
+    const named = sketchNotes.filter((n) => n.startsWith('a character ('));
+    if (named.length) parts.push(`Stick figures: ${named.join('; ')}.`);
+    parts.push('Replace each stick figure with a fully drawn, fully coloured character at the same position and size, and paint a complete, detailed background. Remove every stray sketch line. Keep the speech bubbles, caption boxes and sound effects exactly where they are, with exactly the same text.');
+    return parts.join('\n');
+  }
+
+  function buildPanelPrompt(input) {
+    if (input.sketchN) return buildSketchPrompt(input);
+    const { format, style = '', previous = [], refs = [], description = '' } = input;
     const parts = [`A single comic panel in ${formatStyle(format)} style.`];
     if (style.trim()) parts.push(`Global style: ${sentence(style)}`);
     const story = previous.filter((p) => (p.description || '').trim() || p.imageN);
@@ -58,7 +76,6 @@ Return one strictly valid JSON object and nothing else: {"rewritten_prompt": "..
     if (refs.length) {
       parts.push(`Reference images: ${refs.map((r) => `<image${r.imageN}> is ${r.name ? `"${r.name}"` : 'a reference image'}`).join(', ')}.`);
     }
-    if (sketchN) parts.push(`<image${sketchN}> is a rough sketch of this panel: follow its composition and layout.`);
     if (refs.length || story.some((p) => p.imageN)) {
       parts.push('Keep characters, outfits and setting consistent with the reference and previous panel images, but use those images only as visual references: do not copy, include, tile or juxtapose them.');
     }
@@ -86,20 +103,21 @@ Return one strictly valid JSON object and nothing else: {"rewritten_prompt": "..
     return `<image1> is a comic panel whose outer areas are blurry placeholders around the sharp original picture. Repaint the blurry areas with sharp, detailed content that extends the scene naturally beyond the original frame, keeping the same composition, scale and perspective.${scene}${look}${ref} Keep the sharp picture exactly where it is, at the same size: do not zoom, move or redraw it. No blur may remain.`;
   }
 
-  // Ordre des images : [image source], références, cases précédentes (les plus anciennes tombent en premier), croquis.
+  // Ordre des images : [image source] ou croquis, références, cases précédentes (les plus anciennes tombent en premier).
   // Renvoie les `sources` numérotées ; `previous` dans l'ordre de lecture, ceux sans image sont ignorés.
   function planImages({ current = null, refs = [], previous = [], sketch = null, max = MAX_IMAGES }) {
     const out = [];
     const push = (s) => out.push({ n: out.length + 1, ...s });
     if (current) push({ kind: 'current', assetId: current });
-    let room = max - out.length - (sketch ? 1 : 0);
+    // Le croquis passe en tête : le modèle le traite comme la base à transformer, pas comme une image à recopier.
+    if (sketch && !current) push({ kind: 'sketch', assetId: sketch });
+    let room = max - out.length;
     for (const r of refs.slice(0, Math.max(0, room))) push({ kind: 'ref', assetId: r.assetId, name: r.name || '' });
-    room = max - out.length - (sketch ? 1 : 0);
+    room = max - out.length;
     const withImage = previous.filter((p) => p.assetId);
     for (const p of withImage.slice(Math.max(0, withImage.length - room))) {
       push({ kind: 'previous', assetId: p.assetId, panelId: p.panelId, name: `Page ${p.page}, panel ${p.panel}` });
     }
-    if (sketch && out.length < max) push({ kind: 'sketch', assetId: sketch });
     return out;
   }
 
@@ -274,10 +292,12 @@ Return one strictly valid JSON object and nothing else: {"rewritten_prompt": "..
     async _generateContext(project, panelId, { contextImages = 2, contextTexts = 6, useSketch = true } = {}) {
       const ctx = await this.buildContext(project, panelId, { contextImages, contextTexts });
       const names = new Map(project.library.map((l) => [l.assetId, l.name]));
+      const sketch = useSketch ? ctx.sketchAssetId : null;
       const { sources, images } = await this._images({
         refs: ctx.refs.map((assetId) => ({ assetId, name: names.get(assetId) || '' })),
-        previous: ctx.previous,
-        sketch: useSketch ? ctx.sketchAssetId : null,
+        // Avec un croquis, les cases précédentes ne passent qu'en texte (voir buildSketchPrompt).
+        previous: sketch ? ctx.previous.map((p) => ({ ...p, assetId: null })) : ctx.previous,
+        sketch,
       });
       const nByPanel = new Map(sources.filter((s) => s.kind === 'previous').map((s) => [s.panelId, s.n]));
       const loc = P.locatePanel(project, panelId);
@@ -287,6 +307,7 @@ Return one strictly valid JSON object and nothing else: {"rewritten_prompt": "..
         previous: ctx.previous.map((p) => ({ ...p, imageN: nByPanel.get(p.panelId) || null })),
         refs: sources.filter((s) => s.kind === 'ref').map((s) => ({ imageN: s.n, name: s.name })),
         sketchN: sources.find((s) => s.kind === 'sketch')?.n || null,
+        sketchNotes: sources.some((s) => s.kind === 'sketch') && typeof ComicSketch !== 'undefined' ? ComicSketch.describe(loc.panel.sketch?.items) : [],
         description: loc.panel.description || '',
       };
       return { ctx, sources, images, promptInput, panel: loc.panel, label: P.panelLabel(project, panelId) };

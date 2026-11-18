@@ -25,6 +25,7 @@ const state = {
   pageIndex: 0,
   selectedId: null,
   mode: 'layout',
+  sketchTool: 'select',
   preset: 'mp1',
   randomSeed: true,
 };
@@ -521,6 +522,7 @@ function renderPage() {
   $('removePageBtn').disabled = n <= 1;
   setIconLabel($('addPageBtn'), 'file-plus', t(webtoon ? 'addStrip' : 'addPage'));
   renderPageList();
+  fitPageBar();
 }
 
 function renderPageList() {
@@ -699,7 +701,7 @@ function renderPanelEditor() {
   const sel = selectedPanel();
   const editor = $('panelEditor');
   editor.classList.toggle('empty', !sel);
-  for (const el of editor.querySelectorAll('textarea, button, input')) el.disabled = !sel;
+  for (const el of editor.querySelectorAll('textarea, button, input')) if (!el.classList.contains('collapse-btn')) el.disabled = !sel;
   if (!sel) {
     $('panelTitle').textContent = t('noPanel');
     return;
@@ -715,6 +717,7 @@ function renderPanelEditor() {
   if (hasEnhanced && document.activeElement !== $('enhanced')) $('enhanced').value = panel.enhanced;
   renderPanelRefs();
   renderContextStrip();
+  renderSketchSection();
   renderPresets();
   renderImprove();
   renderVersions();
@@ -1246,6 +1249,11 @@ async function enhancePanel() {
   if (!sel.panel.description.trim()) return setStatus(t('describeFirst'), { error: true });
   const panelId = sel.panel.id;
   const controller = beginTask();
+  try {
+    await prepareSketch(sel.panel, selectedRect());
+  } catch (err) {
+    console.warn('Sketch export failed', err);
+  }
   $('thinkingBox').hidden = false;
   $('thinking').textContent = '';
   $('thinkingSummary').textContent = t('thinking');
@@ -1259,6 +1267,7 @@ async function enhancePanel() {
       sampling: { temperature: +$('temperature').value, top_p: +$('topP').value, top_k: +$('topK').value },
       contextImages: renderOptions(state.preset).contextImages,
       contextTexts: renderOptions(state.preset).contextTexts,
+      useSketch: sketchActive(sel.panel),
       signal: controller.signal,
       onProgress: ({ stage, model, reasoning, content, elapsedMs }) => {
         renderChain(stage);
@@ -1282,6 +1291,79 @@ async function enhancePanel() {
     renderPanelEditor();
   }
   return null;
+}
+
+/* ---------- Croquis ---------- */
+
+const MODE_HINTS = { layout: 'modeLayoutHint', frame: 'modeFrameHint', sketch: 'modeSketchHint' };
+
+// Barre de page : on retire les libellés, puis les éléments secondaires, tant qu'elle déborde.
+const BAR_LEVELS = ['bar-icons', 'bar-tight', 'bar-tiny'];
+function fitPageBar() {
+  const bar = document.querySelector('.page-bar');
+  bar.classList.remove(...BAR_LEVELS);
+  for (const level of BAR_LEVELS) {
+    if (bar.scrollWidth <= bar.clientWidth + 1) break;
+    bar.classList.add(level);
+  }
+}
+
+function setMode(mode) {
+  state.mode = mode;
+  for (const x of $('modes').children) x.setAttribute('aria-pressed', String(x.dataset.mode === mode));
+  $('layoutTools').hidden = mode === 'sketch';
+  $('sketchTools').hidden = mode !== 'sketch';
+  pageView.sketchSel = null;
+  pageView.setMode(mode);
+  fitPageBar();
+  setStatus(t(MODE_HINTS[mode]));
+}
+
+function setSketchTool(tool) {
+  state.sketchTool = tool;
+  pageView.sketchTool = tool;
+  for (const x of $('sketchTools').children) x.setAttribute('aria-pressed', String(x.dataset.tool === tool));
+  setStatus(t(`toolHint_${tool}`));
+}
+
+const sketchActive = (panel) => !!panel?.sketch?.items?.length && panel.sketch.use !== false;
+
+function renderSketchSection() {
+  const panel = selectedPanel()?.panel;
+  if (!panel) return;
+  const n = panel.sketch?.items?.length || 0;
+  $('sketchCount').textContent = n ? String(n) : '';
+  $('sketchUse').checked = panel.sketch?.use !== false;
+  $('sketchUse').disabled = !n;
+  $('sketchClearBtn').disabled = !n;
+  $('sketchHint').textContent = t(n ? (panel.sketch.use !== false ? 'sketchOn' : 'sketchOff') : 'sketchEmpty');
+}
+
+function clearSketch() {
+  const panel = selectedPanel()?.panel;
+  if (!panel?.sketch?.items?.length || !window.confirm(t('confirmSketchClear'))) return;
+  pageView._sketchHistoryOf(panel).push(JSON.stringify(panel.sketch.items));
+  panel.sketch.items = [];
+  pageView.sketchSel = null;
+  touch();
+  renderPage();
+  renderSketchSection();
+}
+
+// Image du croquis envoyée au modèle, au format de la case. Chaque état dessiné est gardé comme image
+// (rien n'est purgé) ; elle n'est refaite que si le croquis ou le format de la case a changé.
+async function prepareSketch(panel, rect) {
+  if (!sketchActive(panel) || !rect) return;
+  const ratio = rect.w / rect.h;
+  const width = Math.round(ratio >= 1 ? 1024 : 1024 * ratio);
+  const height = Math.round(ratio >= 1 ? 1024 / ratio : 1024);
+  const sig = `${width}x${height}:${JSON.stringify(panel.sketch.items)}`;
+  if (panel.sketch.assetId && panel.sketch.sig === sig) return;
+  const blob = await ComicSketch.rasterize(panel.sketch.items, width, height);
+  const asset = await store.addAsset(project().id, blob, { kind: 'sketch', width, height });
+  panel.sketch.assetId = asset.id;
+  panel.sketch.sig = sig;
+  await touch({ now: true });
 }
 
 /* ---------- Progression d'un rendu ---------- */
@@ -1361,7 +1443,8 @@ async function renderPanel(mode, preset = state.preset) {
   tick();
   renderChain('model');
   try {
-    const options = { ...renderOptions(preset), prompt: panel.enhanced || null };
+    await prepareSketch(panel, rect);
+    const options = { ...renderOptions(preset), prompt: panel.enhanced || null, useSketch: sketchActive(panel) };
     const result = await generator.render({
       project: project(),
       panelId: panel.id,
@@ -1561,6 +1644,8 @@ function renderCollapsibles() {
     btn.innerHTML = iconSvg(closed ? 'chevron-down' : 'chevron-up');
     btn.setAttribute('aria-expanded', String(!closed));
     btn.title = t(closed ? 'expandBlock' : 'collapseBlock');
+    const h2 = $(id).querySelector('.block-head h2');
+    if (h2) h2.title = h2.textContent.trim();
     btn.setAttribute('aria-label', btn.title);
   }
   // Blocs repliés : leurs en-têtes se rangent côte à côte en haut de la colonne, alignés sur la barre de page.
@@ -1584,6 +1669,7 @@ function bindCollapsibles() {
       saveSettings();
     });
   }
+  new ResizeObserver(() => fitPageBar()).observe(document.querySelector('.page-bar-wrap'));
   const observer = new ResizeObserver(measureBars);
   observer.observe(document.querySelector('.topbar'));
   observer.observe($('chain'));
@@ -1678,14 +1764,18 @@ function bindEvents() {
 
   // Page
   $('format').addEventListener('change', () => setFormat($('format').value));
-  for (const b of $('modes').children) {
-    b.addEventListener('click', () => {
-      state.mode = b.dataset.mode;
-      for (const x of $('modes').children) x.setAttribute('aria-pressed', String(x === b));
-      pageView.setMode(state.mode);
-      setStatus(t(state.mode === 'frame' ? 'modeFrameHint' : 'modeLayoutHint'));
-    });
-  }
+  for (const b of $('modes').children) b.addEventListener('click', () => setMode(b.dataset.mode));
+  for (const b of $('sketchTools').children) b.addEventListener('click', () => setSketchTool(b.dataset.tool));
+  $('sketchDrawBtn').addEventListener('click', () => setMode('sketch'));
+  $('sketchClearBtn').addEventListener('click', clearSketch);
+  $('sketchUse').addEventListener('change', () => {
+    const panel = selectedPanel()?.panel;
+    if (!panel) return;
+    panel.sketch ||= { items: [], use: true };
+    panel.sketch.use = $('sketchUse').checked;
+    touch();
+    renderSketchSection();
+  });
   $('splitColsBtn').addEventListener('click', () => splitSelected('row'));
   $('splitRowsBtn').addEventListener('click', () => splitSelected('col'));
   $('removePanelBtn').addEventListener('click', removeSelected);
@@ -1822,6 +1912,7 @@ async function start() {
       if (state.selectedId) {
         renderPresets();
         renderImprove();
+        renderSketchSection();
       }
     },
     onSwap: swapPanels,

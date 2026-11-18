@@ -94,6 +94,7 @@
 
   <!-- Centre : la page défile avec le document -->
   <section id="stage" class="stage">
+    <div class="page-bar-wrap">
     <div class="page-bar glass">
       <label class="opt" data-i18n-title="formatLabel">
         <span class="icon-slot small" data-icon="book-open"></span>
@@ -108,8 +109,10 @@
       <div id="modes" class="tools" role="toolbar">
         <button type="button" data-mode="layout" data-icon="mouse-pointer-2" data-i18n="modeLayout" data-i18n-title="modeLayout"></button>
         <button type="button" data-mode="frame" data-icon="move" data-i18n="modeFrame" data-i18n-title="modeFrame"></button>
+        <button type="button" data-mode="sketch" data-icon="pen-line" data-i18n="modeSketch" data-i18n-title="modeSketch"></button>
       </div>
       <span class="bar-sep"></span>
+      <span id="layoutTools" class="bar-group">
       <button id="splitColsBtn" type="button" class="btn icon-btn" data-icon="columns-2" data-i18n-title="splitCols" data-i18n-aria="splitCols"></button>
       <button id="splitRowsBtn" type="button" class="btn icon-btn" data-icon="rows-2" data-i18n-title="splitRows" data-i18n-aria="splitRows"></button>
       <button id="removePanelBtn" type="button" class="btn icon-btn" data-icon="trash-2" data-i18n-title="removePanel" data-i18n-aria="removePanel"></button>
@@ -117,6 +120,17 @@
         <button id="templateBtn" type="button" class="btn small" data-icon="layout-grid" data-i18n="templates" data-i18n-title="templates" aria-expanded="false"></button>
         <div id="templateMenu" class="menu template-menu" hidden></div>
       </div>
+      </span>
+      <span id="sketchTools" class="bar-group tools" role="toolbar" hidden>
+        <button type="button" data-tool="select" data-icon="mouse-pointer-2" data-i18n-title="toolSelect" data-i18n-aria="toolSelect"></button>
+        <button type="button" data-tool="pen" data-icon="pencil" data-i18n-title="toolPen" data-i18n-aria="toolPen"></button>
+        <button type="button" data-tool="eraser" data-icon="eraser" data-i18n-title="toolEraser" data-i18n-aria="toolEraser"></button>
+        <button type="button" data-tool="character" data-icon="user" data-i18n-title="toolCharacter" data-i18n-aria="toolCharacter"></button>
+        <button type="button" data-tool="speech" data-icon="message-circle" data-i18n-title="toolSpeech" data-i18n-aria="toolSpeech"></button>
+        <button type="button" data-tool="thought" data-icon="cloud" data-i18n-title="toolThought" data-i18n-aria="toolThought"></button>
+        <button type="button" data-tool="caption" data-icon="scroll-text" data-i18n-title="toolCaption" data-i18n-aria="toolCaption"></button>
+        <button type="button" data-tool="sfx" data-icon="zap" data-i18n-title="toolSfx" data-i18n-aria="toolSfx"></button>
+      </span>
       <span class="spacer"></span>
       <label id="stripHeightBox" class="opt" data-i18n-title="stripHeight" hidden><span class="icon-slot small" data-icon="move-vertical"></span><span class="bar-label" data-i18n="stripHeight"></span>
         <input id="stripHeight" class="field num" type="number" min="400" max="20000" step="100"></label>
@@ -131,6 +145,8 @@
         <span id="pageInfo" class="frame-info"></span>
         <button id="nextPageBtn" type="button" class="btn icon-btn" data-icon="chevron-right" data-i18n-title="nextPage" data-i18n-aria="nextPage"></button>
       </span>
+    </div>
+
     </div>
 
     <div id="viewport" class="viewport"></div>
@@ -203,6 +219,18 @@
         </div>
         <div id="contextStrip" class="refs context-strip"></div>
         <p id="contextHint" class="hint"></p>
+      </div>
+
+      <div class="section" id="sketchSection">
+        <div class="section-head">
+          <span class="section-title"><span class="icon-slot small" data-icon="pen-line"></span><span data-i18n="sketchLabel"></span> <span id="sketchCount" class="muted"></span></span>
+          <span class="section-actions">
+            <button id="sketchClearBtn" type="button" class="btn icon-btn" data-icon="trash-2" data-i18n-title="sketchClear" data-i18n-aria="sketchClear"></button>
+            <button id="sketchDrawBtn" type="button" class="btn small" data-icon="pencil" data-i18n="sketchDraw"></button>
+          </span>
+        </div>
+        <label class="opt check"><input id="sketchUse" type="checkbox" checked> <span data-i18n="sketchUse"></span></label>
+        <p id="sketchHint" class="hint"></p>
       </div>
 
       <div class="section">
@@ -343,6 +371,7 @@
   <script src="project.js"></script>
   <script src="store.js"></script>
   <script src="editor.js"></script>
+  <script src="sketch.js"></script>
   <script src="generate.js"></script>
   <script src="export.js"></script>
   <script src="pageview.js"></script>

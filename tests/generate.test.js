@@ -95,7 +95,7 @@ target.refs = ['refA', 'refB'];
     sketch: 'sk',
   });
   assert.strictEqual(plan.length, 10);
-  assert.deepStrictEqual(plan.map((s) => s.kind), ['ref', 'ref', 'ref', 'ref', 'previous', 'previous', 'previous', 'previous', 'previous', 'sketch']);
+  assert.deepStrictEqual(plan.map((s) => s.kind), ['sketch', 'ref', 'ref', 'ref', 'ref', 'previous', 'previous', 'previous', 'previous', 'previous']);
   assert.deepStrictEqual(plan.filter((s) => s.kind === 'previous').map((s) => s.assetId), ['img3', 'img4', 'img5', 'img6', 'img7']);
   assert.deepStrictEqual(plan.map((s) => s.n), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   assert.strictEqual(planImages({ refs: Array.from({ length: 12 }, (_, i) => ({ assetId: `r${i}` })), sketch: 's' }).length, 10);
@@ -242,6 +242,12 @@ target.refs = ['refA', 'refB'];
   assert.deepStrictEqual(streamSteps(40, false), [1, 2]);
   assert.deepStrictEqual(streamSteps(4), [1, 2, 3]);
 
+  // Croquis : prompt de transformation, sans récit long ni images des cases précédentes.
+  const sk = buildPanelPrompt({ format: 'bd', sketchN: 1, description: 'Léa entre.', previous: [{ page: 1, panel: 1, description: 'Un phare.' }], refs: [{ imageN: 2, name: 'Léa' }], sketchNotes: ['a character (Léa) at the left, about 60% of the panel height', 'a speech bubble at the top: "Oh !"'] });
+  assert(sk.startsWith('Transform <image1>, a rough black-and-white layout sketch'));
+  assert(sk.includes('Scene: Léa entre.') && !sk.includes('Un phare.'));
+  assert(sk.includes('<image2> is "Léa"') && sk.includes('Stick figures: a character (Léa)'));
+  assert(!sk.includes('speech bubble at the top'));
   console.log('generate tests OK');
 })().catch((err) => {
   console.error(err);

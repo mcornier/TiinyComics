@@ -152,7 +152,7 @@
 
 /* Mise en page : la barre du haut, la chaîne et les colonnes latérales sont fixes ; la zone centrale défile
    avec le document, et c'est la barre de défilement de la fenêtre, à droite, qui sert. */
-:root { --gap: 10px; --top-h: 84px; --bottom-h: 80px; --left-w: 270px; --right-w: 340px; }
+:root { --gap: 10px; --top-h: 84px; --bottom-h: 80px; --right-w: 340px; }
 html, body { height: auto; min-height: 100%; }
 body { display: block; padding: 0; overflow: auto; }
 .topbar { position: fixed; top: var(--gap); left: var(--gap); right: var(--gap); z-index: 30; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
@@ -176,11 +176,8 @@ body { display: block; padding: 0; overflow: auto; }
 .status { position: sticky; bottom: var(--bottom-h); flex: none; }
 .stage:not(:has(.viewport.fit)) .status { z-index: 5; padding: 2px 12px; border-radius: 8px; background: rgba(12, 14, 18, .72); }
 /* Colonne repliée : la page s'étend jusqu'au bord ; la barre de page reste à côté des en-têtes repliés. */
-.page-bar { align-self: stretch; width: auto; }
 body.left-collapsed .stage { padding-left: var(--gap); }
-body.left-collapsed .page-bar { margin-left: calc(var(--left-w) + var(--gap)); }
 body.right-collapsed .stage { padding-right: var(--gap); }
-body.right-collapsed .page-bar { margin-right: calc(var(--right-w) + var(--gap)); }
 body.left-collapsed .side-left, body.right-collapsed .side-right { bottom: auto; }
 .zoom-label { min-width: 58px; justify-content: center; font-variant-numeric: tabular-nums; }
 
@@ -208,13 +205,6 @@ body.left-collapsed .side-left, body.right-collapsed .side-right { bottom: auto;
   .side .block > .block-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; margin: 0; padding: 14px 4px 14px 14px; scrollbar-gutter: stable; }
 }
 
-/* Barre de page sur une ligne : les libellés cèdent la place aux icônes quand la zone se resserre. */
-@container (max-width: 1060px) {
-  .page-bar #modes button span, .page-bar #templateBtn span, .page-bar .bar-label { display: none; }
-}
-@container (max-width: 640px) {
-  .page-bar .bar-sep, .page-bar #stripHeightBox { display: none !important; }
-}
 
 /* Barres de défilement assorties à l'interface */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -241,7 +231,7 @@ body.left-collapsed .side-left, body.right-collapsed .side-right { bottom: auto;
   .stage { order: 1; min-height: 0; padding: 0; }
   .stage:has(.viewport.fit) { height: auto; overflow: visible; }
   .viewport.fit { height: 72vh; flex: none; }
-  .page-bar { top: 0; }
+  .page-bar-wrap { position: static; margin: 0 !important; }
   .status { position: static; }
   .side-right { order: 2; }
   .side-left { order: 3; }
@@ -277,3 +267,35 @@ body.left-collapsed .side-left, body.right-collapsed .side-right { bottom: auto;
 @media (prefers-reduced-motion: reduce) {
   .cell-loading, .cell-loading::after { animation: none; }
 }
+
+/* Barre de page : sa propre largeur décide du passage en icônes ; elle ne passe jamais sur deux lignes. */
+.page-bar-wrap { position: sticky; top: var(--top-h); z-index: 10; flex: none; align-self: stretch; min-width: 0; container-type: inline-size; }
+.page-bar-wrap .page-bar { position: static; width: 100%; }
+.page-bar > *, .page-bar .tools, .bar-group { flex: none; }
+.page-bar .spacer { flex: 1 1 0; min-width: 0; }
+.page-bar .tools, .bar-group { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; }
+body.left-collapsed .page-bar-wrap { margin-left: calc(var(--left-w) + var(--gap)); }
+body.right-collapsed .page-bar-wrap { margin-right: calc(var(--right-w) + var(--gap)); }
+.page-bar.bar-icons #modes button span, .page-bar.bar-icons #templateBtn span, .page-bar.bar-icons .bar-label { display: none; }
+.page-bar.bar-tight .bar-sep, .page-bar.bar-tight #zoomLabel { display: none; }
+.page-bar.bar-tight #stripHeight { width: 70px; }
+.page-bar.bar-tiny .zoom-box, .page-bar.bar-tiny #pageInfo { display: none; }
+
+/* Colonne de gauche plus étroite ; repliés, ses blocs n'affichent que leur icône. */
+:root { --left-w: max(200px, 15vw); }
+.side-left .side-inline .block-head h2 span[data-i18n], .side-left .side-inline #libraryCount { display: none; }
+.side-left .side-inline .block-head { padding-left: 10px; gap: 4px; }
+
+/* Croquis */
+.sketch-layer { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.sketch-layer svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.cell:not(.sketching) .sketch-layer { opacity: .55; }
+.cell.sketching { cursor: crosshair; }
+.cell.sketching img { opacity: .3; }
+.cell.sketching .cell-text { display: none; }
+.mode-sketch .divider { pointer-events: none; }
+.sk-sel { fill: none; stroke: var(--active); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.sk-handle { fill: var(--active); stroke: #0b0d10; stroke-width: 1.5; }
+.sketch-text { position: absolute; z-index: 6; min-height: 0; padding: 6px 8px; resize: none; font-size: 13px; line-height: 1.3; background: rgba(12, 14, 18, .92); }
+.opt.check { gap: 8px; cursor: pointer; }
+.opt.check input { accent-color: var(--active); }

@@ -18,6 +18,11 @@ class PageView {
     // Zoom de la page, relatif à l'ajustement (1 = la page tient dans la zone ; en webtoon, la largeur par défaut).
     this.zoom = 1;
     this.fitHeight = null;
+    // Croquis : outil actif, élément sélectionné, historique d'annulation par case (session seulement).
+    this.sketchTool = 'select';
+    this.sketchSel = null;
+    this.sketchHistory = new Map();
+    document.addEventListener('keydown', (e) => this._sketchKey(e));
     this.project = null;
     this.pageIndex = 0;
     this.selectedId = null;
@@ -91,6 +96,7 @@ class PageView {
     this.el.classList.toggle('fit', !this.webtoon && this.zoom === 1);
     this.el.classList.toggle('zoomed', !this.webtoon && this.zoom !== 1);
     this.el.classList.toggle('mode-frame', this.mode === 'frame');
+    this.el.classList.toggle('mode-sketch', this.mode === 'sketch');
     const scrollTop = this.el.scrollTop;
     this.el.replaceChildren(...pages.map((i) => this._renderPage(i)));
     this.el.scrollTop = scrollTop;
@@ -152,6 +158,17 @@ class PageView {
       text.textContent = panel.description || t('describeFirst');
       cell.append(text);
     }
+    // Croquis : affiché en mode Croquis sur la case sélectionnée, ou en filigrane tant qu'il n'y a pas d'image.
+    const sketchItems = panel.sketch?.items || [];
+    const sketching = this.mode === 'sketch' && panel.id === this.selectedId;
+    if (sketching) cell.classList.add('sketching');
+    if (sketching || (sketchItems.length && !url)) {
+      const layer = document.createElement('div');
+      layer.className = 'sketch-layer';
+      layer.innerHTML = ComicSketch.svgMarkup(sketchItems, rect.w * scale, rect.h * scale, { selectedId: sketching ? this.sketchSel : null });
+      cell.append(layer);
+    }
+    if (sketchItems.length) cell.classList.add('has-sketch');
     if (preview) {
       cell.classList.add('rendering');
       if (preview.url) cell.classList.add('previewing');
@@ -171,7 +188,13 @@ class PageView {
     cell.append(num);
     cell.addEventListener('pointerdown', (e) => this._cellDown(e, panel, rect, scale, cell, pageIndex));
     cell.addEventListener('wheel', (e) => this._cellWheel(e, panel), { passive: false });
-    cell.addEventListener('dblclick', () => {
+    cell.addEventListener('dblclick', (e) => {
+      if (this.mode === 'sketch' && panel.id === this.selectedId) {
+        const box = cell.getBoundingClientRect();
+        const hit = ComicSketch.hitTest(panel.sketch?.items || [], e.clientX - box.left, e.clientY - box.top, box.width, box.height);
+        if (hit && hit.type !== 'stroke') this._editSketchText(panel, hit);
+        return;
+      }
       if (this.mode !== 'frame' || panel.id !== this.selectedId) return;
       panel.placement = { zoom: 1, x: 0, y: 0 };
       this.refresh();
@@ -197,6 +220,10 @@ class PageView {
 
   _cellDown(e, panel, rect, scale, cell, pageIndex) {
     if (e.button !== 0) return;
+    if (this.mode === 'sketch' && panel.id === this.selectedId) {
+      this._sketchDown(e, panel, rect, scale, cell);
+      return;
+    }
     const version = PV.currentVersion(panel);
     const framing = this.mode === 'frame' && panel.id === this.selectedId && version;
     e.preventDefault();
@@ -307,6 +334,196 @@ class PageView {
     });
     el.dataset.key = `${d.splitId}:${d.index}`;
     return el;
+  }
+
+  /* ---------- Croquis ---------- */
+
+  _sketchHistoryOf(panel) {
+    if (!this.sketchHistory.has(panel.id)) this.sketchHistory.set(panel.id, []);
+    const list = this.sketchHistory.get(panel.id);
+    if (list.length > 60) list.shift();
+    return list;
+  }
+
+  _sketchCommit(panel, before) {
+    if (JSON.stringify(panel.sketch.items) === before) return;
+    this._sketchHistoryOf(panel).push(before);
+    this.onChange('sketch');
+  }
+
+  _sketchDown(e, panel, rect, scale, cell) {
+    const SK = ComicSketch;
+    e.preventDefault();
+    const W = rect.w * scale;
+    const H = rect.h * scale;
+    const box = cell.getBoundingClientRect();
+    const pos = (ev) => [ev.clientX - box.left, ev.clientY - box.top];
+    const [px, py] = pos(e);
+    panel.sketch ||= { items: [], use: true };
+    panel.sketch.items ||= [];
+    const items = panel.sketch.items;
+    const before = JSON.stringify(items);
+    let layer = cell.querySelector('.sketch-layer');
+    if (!layer) {
+      layer = document.createElement('div');
+      layer.className = 'sketch-layer';
+      cell.append(layer);
+    }
+    const draw = () => { layer.innerHTML = SK.svgMarkup(items, W, H, { selectedId: this.sketchSel }); };
+    const tool = this.sketchTool;
+    let onMove = null;
+    let onUp = null;
+    this.drag = { live: true };
+
+    if (tool === 'pen') {
+      const stroke = { id: SK.uid(), type: 'stroke', points: [[px / W, py / H]], size: 1 };
+      items.push(stroke);
+      this.sketchSel = null;
+      onMove = ([x, y]) => {
+        const last = stroke.points[stroke.points.length - 1];
+        if (Math.hypot(x - last[0] * W, y - last[1] * H) < 2) return;
+        stroke.points.push([x / W, y / H]);
+        draw();
+      };
+      onUp = () => {
+        if (stroke.points.length < 2) stroke.points.push([px / W + 0.003, py / H + 0.003]);
+      };
+    } else if (tool === 'eraser') {
+      const erase = ([x, y]) => {
+        const hit = SK.hitTest(items, x, y, W, H, 10);
+        if (!hit) return;
+        items.splice(items.indexOf(hit), 1);
+        draw();
+      };
+      erase([px, py]);
+      onMove = erase;
+    } else if (SK.BOX_TOOLS.includes(tool)) {
+      const item = SK.createItem(tool, SK.defaultBox(tool, px / W, py / H));
+      items.push(item);
+      this.sketchSel = item.id;
+      draw();
+      onMove = ([x, y]) => {
+        if (Math.hypot(x - px, y - py) < DRAG_THRESHOLD) return;
+        item.x = Math.max(0, Math.min(px, x) / W);
+        item.y = Math.max(0, Math.min(py, y) / H);
+        item.w = Math.max(0.03, Math.abs(x - px) / W);
+        item.h = Math.max(0.03, Math.abs(y - py) / H);
+        if (item.tx !== undefined) {
+          item.tx = Math.min(1, item.x + item.w * 0.25);
+          item.ty = Math.min(1, item.y + item.h * 1.5);
+        }
+        draw();
+      };
+      // Bulles, récitatif, onomatopée : on saisit le texte tout de suite.
+      if (SK.TEXT_TYPES.includes(tool)) onUp = () => setTimeout(() => this._editSketchText(panel, item), 0);
+    } else {
+      const selected = items.find((it) => it.id === this.sketchSel);
+      const handle = SK.hitHandle(selected, px, py, W, H);
+      const target = handle ? selected : SK.hitTest(items, px, py, W, H);
+      this.sketchSel = target?.id || null;
+      draw();
+      if (target) {
+        let last = [px, py];
+        onMove = ([x, y]) => {
+          const dx = (x - last[0]) / W;
+          const dy = (y - last[1]) / H;
+          last = [x, y];
+          if (handle === 'resize') {
+            target.w = Math.max(0.03, target.w + dx);
+            target.h = Math.max(0.03, target.h + dy);
+          } else if (handle === 'tail') {
+            target.tx += dx;
+            target.ty += dy;
+          } else SK.moveItem(target, dx, dy);
+          draw();
+        };
+      }
+    }
+
+    // Écoute sur la fenêtre : le geste continue même si le pointeur sort de la case.
+    const move = (ev) => onMove?.(pos(ev));
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      onUp?.();
+      this.drag = null;
+      this._sketchCommit(panel, before);
+      this.refresh();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  }
+
+  // Saisie du texte d'une bulle, d'un récitatif, d'une onomatopée ou du nom d'un personnage, sur place.
+  _editSketchText(panel, item) {
+    const cell = this.el.querySelector(`.cell[data-panel-id="${panel.id}"]`);
+    if (!cell) return;
+    const r = cell.getBoundingClientRect();
+    const field = document.createElement('textarea');
+    field.className = 'sketch-text field';
+    field.value = item.text || '';
+    field.placeholder = t(item.type === 'character' ? 'sketchNamePlaceholder' : 'sketchTextPlaceholder');
+    Object.assign(field.style, {
+      left: `${Math.min(item.x * r.width, Math.max(0, r.width - 160))}px`,
+      top: `${item.y * r.height}px`,
+      width: `${Math.max(item.w * r.width, 160)}px`,
+      height: `${Math.max(item.h * r.height, 56)}px`,
+    });
+    const before = JSON.stringify(panel.sketch.items);
+    this.drag = { live: true };
+    let closed = false;
+    const done = (save) => {
+      if (closed) return;
+      closed = true;
+      if (save) item.text = field.value.trim();
+      field.remove();
+      this.drag = null;
+      if (save) this._sketchCommit(panel, before);
+      this.refresh();
+    };
+    field.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        done(true);
+      } else if (e.key === 'Escape') done(false);
+    });
+    field.addEventListener('pointerdown', (e) => e.stopPropagation());
+    field.addEventListener('blur', () => done(true));
+    cell.append(field);
+    field.focus();
+    field.select();
+  }
+
+  _sketchKey(e) {
+    if (this.mode !== 'sketch' || !this.project || this.drag) return;
+    if (e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+    const panel = PV.locatePanel(this.project, this.selectedId)?.panel;
+    if (!panel?.sketch?.items) return;
+    const items = panel.sketch.items;
+    if ((e.key === 'Delete' || e.key === 'Backspace') && this.sketchSel) {
+      const i = items.findIndex((it) => it.id === this.sketchSel);
+      if (i < 0) return;
+      e.preventDefault();
+      const before = JSON.stringify(items);
+      items.splice(i, 1);
+      this.sketchSel = null;
+      this._sketchCommit(panel, before);
+      this.refresh();
+    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      const previous = this._sketchHistoryOf(panel).pop();
+      if (!previous) return;
+      e.preventDefault();
+      panel.sketch.items = JSON.parse(previous);
+      this.sketchSel = null;
+      this.onChange('sketch');
+      this.refresh();
+    } else if (e.key === 'Escape' && this.sketchSel) {
+      this.sketchSel = null;
+      this.refresh();
+    }
   }
 
   // Webtoon : la hauteur de chaque bande se règle en tirant son bord inférieur.
