@@ -1568,6 +1568,9 @@ function renderCollapsibles() {
     const inline = side.querySelector('.side-inline');
     const blocks = [...side.querySelectorAll('.block')].sort((x, y) => x.dataset.order - y.dataset.order);
     for (const block of blocks) (block.classList.contains('collapsed') ? inline : side).append(block);
+    // Colonne entièrement repliée : la page récupère sa largeur, seule la ligne d'en-têtes reste.
+    const all = blocks.every((b) => b.classList.contains('collapsed'));
+    document.body.classList.toggle(side.classList.contains('side-left') ? 'left-collapsed' : 'right-collapsed', all);
   }
 }
 

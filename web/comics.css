@@ -175,6 +175,13 @@ body { display: block; padding: 0; overflow: auto; }
 .viewport.webtoon .page { scroll-margin-top: calc(var(--top-h) + 64px); }
 .status { position: sticky; bottom: var(--bottom-h); flex: none; }
 .stage:not(:has(.viewport.fit)) .status { z-index: 5; padding: 2px 12px; border-radius: 8px; background: rgba(12, 14, 18, .72); }
+/* Colonne repliée : la page s'étend jusqu'au bord ; la barre de page reste à côté des en-têtes repliés. */
+.page-bar { align-self: stretch; width: auto; }
+body.left-collapsed .stage { padding-left: var(--gap); }
+body.left-collapsed .page-bar { margin-left: calc(var(--left-w) + var(--gap)); }
+body.right-collapsed .stage { padding-right: var(--gap); }
+body.right-collapsed .page-bar { margin-right: calc(var(--right-w) + var(--gap)); }
+body.left-collapsed .side-left, body.right-collapsed .side-right { bottom: auto; }
 .zoom-label { min-width: 58px; justify-content: center; font-variant-numeric: tabular-nums; }
 
 /* Blocs repliables. Repliés, leurs en-têtes se rangent côte à côte en haut de la colonne. */
