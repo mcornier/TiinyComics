@@ -16,7 +16,6 @@
   const EXTEND_MAX_REFS = 3;
   const RETRY_DELAY_MS = 10000;
   // Sans aperçu, rien ne signale la fin de l'encodage (mesures TiinyPaint, modèle chargé).
-  const EMBED_ESTIMATE_MS = { text: 4000, images: 15000 };
   const DEFAULT_SAMPLING = { temperature: 1, top_p: 0.95, top_k: 20 };
 
   const FORMAT_STYLES = {
@@ -102,17 +101,18 @@ Return one strictly valid JSON object and nothing else: {"rewritten_prompt": "..
 
   // Étapes à décoder (la dernière est exclue : l'événement final porte l'image). Étape 1 ajoutée dès qu'il y a
   // des aperçus : c'est le seul signal de la fin de l'encodage, elle n'est pas affichée.
-  function previewSteps(steps, every) {
-    if (!every) return [];
-    const list = [];
-    for (let s = every; s < steps; s += every) list.push(s);
-    return list;
+  // Aperçus affichés : à 50 %, 75 % et 90 % du rendu (avant, le latent décodé n'est que du bruit).
+  function previewSteps(steps) {
+    const list = [0.5, 0.75, 0.9].map((f) => Math.round(steps * f)).filter((n) => n > 2 && n < steps);
+    return [...new Set(list)];
   }
 
-  function streamSteps(steps, every) {
-    const list = previewSteps(steps, every);
-    if (every && steps > 1 && list[0] !== 1) list.unshift(1);
-    return list;
+  // Étapes demandées au flux : 1 et 2 (non affichées) mesurent l'encodage et la durée d'une étape,
+  // puis les aperçus. Sans étape demandée, le flux ne signale rien et la progression serait aveugle.
+  function streamSteps(steps, previews = true) {
+    const list = [1, 2].filter((n) => n < steps);
+    if (previews) list.push(...previewSteps(steps));
+    return [...new Set(list)].sort((x, y) => x - y);
   }
 
   // Réponse d'un LLM ou d'un PE : JSON {"rewritten_prompt"}, éventuellement précédé de <think>, sinon texte brut.
@@ -347,7 +347,7 @@ Return one strictly valid JSON object and nothing else: {"rewritten_prompt": "..
         steps,
         guidance_scale: o.guidance ?? 1,
         seed: o.seed ?? randomSeed(),
-        stream_return_steps: streamSteps(steps, o.previewEvery ?? 0),
+        stream_return_steps: streamSteps(steps, o.previews ?? true),
         app_id: 'tiinycomics',
       };
       if (images.length) body.images = images;
@@ -485,40 +485,30 @@ Return one strictly valid JSON object and nothing else: {"rewritten_prompt": "..
 
     /* ---------- Rendu ---------- */
 
-    async render({ project, panelId, rect, mode = 'generate', preset = 'mp1', options = {}, signal, onStage, onPreview }) {
+    async render({ project, panelId, rect, mode = 'generate', preset = 'mp1', options = {}, signal, onStage, onStep, onPreview }) {
       const client = this._client();
       const { body, sources, plan, contextPanels } = await this.buildRenderRequest({ project, panelId, rect, mode, preset, options });
-      const previewEvery = options.previewEvery ?? 0;
+      const shown = new Set(previewSteps(body.steps));
       await this.ensureLoaded(body.model, signal);
       let lastStep = 0;
-      let embedTimer = null;
       const attempt = () => client.streamImage(body, {
         signal,
-        onStart: () => {
-          onStage?.('embed');
-          clearTimeout(embedTimer);
-          if (!previewEvery) embedTimer = setTimeout(() => onStage?.('model'), body.images?.length ? EMBED_ESTIMATE_MS.images : EMBED_ESTIMATE_MS.text);
-        },
+        onStart: () => onStage?.('embed'),
         onPreview: (event) => {
-          clearTimeout(embedTimer);
           if (!lastStep) onStage?.('model');
           lastStep = Math.max(lastStep, event.step || 0);
-          // L'étape 1 n'est demandée que comme signal de fin d'encodage : du bruit, non affiché.
-          if (event.step !== 1 || previewEvery === 1) onPreview?.({ image: event.image, step: event.step, total: body.steps });
+          onStep?.({ step: event.step, total: body.steps, requested: body.stream_return_steps });
+          if (shown.has(event.step) && (options.previews ?? true)) onPreview?.({ image: event.image, step: event.step, total: body.steps });
         },
       });
       let result;
       try {
-        try {
-          result = await attempt();
-        } catch (err) {
-          // Un modèle tout juste chargé peut répondre « xh2a backend fail » : on réessaie une fois.
-          if (err.name === 'AbortError' || lastStep || !/backend fail/i.test(err.message || '')) throw err;
-          await sleep(this.retryDelayMs, signal);
-          result = await attempt();
-        }
-      } finally {
-        clearTimeout(embedTimer);
+        result = await attempt();
+      } catch (err) {
+        // Un modèle tout juste chargé peut répondre « xh2a backend fail » : on réessaie une fois.
+        if (err.name === 'AbortError' || lastStep || !/backend fail/i.test(err.message || '')) throw err;
+        await sleep(this.retryDelayMs, signal);
+        result = await attempt();
       }
       onStage?.('output');
       const blob = plan ? await this._commitExtend(plan, result.image) : dataUrlToBlob(result.image);

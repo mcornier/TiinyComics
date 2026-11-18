@@ -39,7 +39,7 @@ let saveTimer = null;
 
 /* ---------- Réglages persistés (clé API comprise, dans ce navigateur seulement) ---------- */
 
-const PERSISTED_INPUTS = ['steps', 'draftSteps', 'guidance', 'seed', 'scheduler', 'negative', 'previewMode', 'temperature', 'topP', 'topK', 'contextImages', 'contextTexts'];
+const PERSISTED_INPUTS = ['steps', 'draftSteps', 'guidance', 'seed', 'scheduler', 'negative', 'previewSteps', 'temperature', 'topP', 'topK', 'contextImages', 'contextTexts'];
 
 function loadSettings() {
   try {
@@ -1228,7 +1228,7 @@ function renderOptions(preset) {
     seed: state.randomSeed ? null : +$('seed').value,
     scheduler: $('scheduler').value,
     negative: $('negative').value.trim(),
-    previewEvery: +$('previewMode').value,
+    previews: $('previewSteps').value !== '0',
     contextImages: Math.max(0, +$('contextImages').value || 0),
     contextTexts: Math.max(0, +$('contextTexts').value || 0),
     useSketch: true,
@@ -1285,6 +1285,50 @@ async function enhancePanel() {
   return null;
 }
 
+/* ---------- Progression d'un rendu ---------- */
+
+// Le flux ne signale que les étapes demandées (1, 2, puis les aperçus) : entre deux, on extrapole
+// à partir de la durée mesurée d'une étape, sans dépasser la prochaine étape attendue.
+function estimateProgress(p, now = Date.now()) {
+  if (p.phase === 'output') return { pct: 99, step: p.total, remaining: 0 };
+  const points = p.points;
+  if (!points.length) return { pct: 0, step: 0, remaining: null };
+  const first = points[0];
+  const last = points[points.length - 1];
+  const rate = last.step > first.step ? (last.t - first.t) / (last.step - first.step) : null;
+  const next = p.requested.find((n) => n > last.step) ?? p.total;
+  const step = Math.min(next - 0.2, last.step + (rate ? (now - last.t) / rate : 0));
+  return {
+    pct: Math.max(0, Math.min(98, (step / p.total) * 100)),
+    step,
+    remaining: rate ? Math.max(0, ((p.total - step) * rate) / 1000) : null,
+  };
+}
+
+function renderGenInfo(p) {
+  if (!p) {
+    $('nodeModel').classList.remove('generating');
+    $('genInfo').hidden = true;
+    return;
+  }
+  const est = estimateProgress(p);
+  const pct = Math.floor(est.pct);
+  $('nodeModel').classList.add('generating');
+  $('genInfo').hidden = false;
+  $('genTitle').textContent = p.title;
+  $('genPct').textContent = `${pct} %`;
+  $('genBarFill').style.width = `${est.pct}%`;
+  $('genDetail').textContent = {
+    prep: t('genPrep'),
+    embed: t('genEmbed'),
+    model: t('genStep', { s: Math.max(1, Math.floor(est.step)), n: p.total }),
+    output: t('genOutput'),
+  }[p.phase];
+  const elapsed = formatDuration((Date.now() - p.started) / 1000);
+  $('genTime').textContent = est.remaining !== null && p.phase === 'model' ? t('genTime', { t: elapsed, r: formatDuration(est.remaining) }) : elapsed;
+  pageView.setProgress(est.pct, `${pct} %`);
+}
+
 // mode : 'generate' (preset choisi), 'upscale' (preset cible) ou 'extend'.
 async function renderPanel(mode, preset = state.preset) {
   const blocker = generateBlocker();
@@ -1299,13 +1343,23 @@ async function renderPanel(mode, preset = state.preset) {
   const label = P.panelLabel(project(), panel.id);
   let lastStep = 0;
   let total = 0;
+  const presetLabel = preset === 'draft' ? t('presetDraft') : `${preset.replace('mp', '')} MP`;
+  const progress = {
+    title: `${t('panelShort', { n: `${label.page}·${label.panel}` })} · ${mode === 'extend' ? t('versionMode_extend') : `${t(`versionMode_${mode}`)} ${presetLabel}`}`,
+    phase: 'prep',
+    points: [],
+    requested: [],
+    total: 0,
+    started,
+  };
   const tick = () => {
     const elapsed = t('elapsed', { t: formatDuration((Date.now() - started) / 1000) });
-    setStatus(lastStep ? `${t('stepOf', { s: lastStep, n: total })} · ${elapsed}` : `${t('rendering', { n: `${label.page}·${label.panel}` })} ${elapsed}`);
+    renderGenInfo(progress);
+    setStatus(lastStep ? `${$('genDetail').textContent} · ${elapsed}` : `${t('rendering', { n: `${label.page}·${label.panel}` })} ${elapsed}`);
   };
-  const timer = setInterval(tick, 1000);
+  const timer = setInterval(tick, 250);
+  pageView.setRendering({ panelId: panel.id, url: null, label: '0 %', progress: 0 });
   tick();
-  pageView.setRendering({ panelId: panel.id, url: null, label: '' });
   renderChain('model');
   try {
     const options = { ...renderOptions(preset), prompt: panel.enhanced || null };
@@ -1317,14 +1371,20 @@ async function renderPanel(mode, preset = state.preset) {
       preset,
       options,
       signal: controller.signal,
-      onStage: (stage) => renderChain(stage === 'output' ? 'output' : 'model'),
-      onPreview: ({ image, step, total: n }) => {
+      onStage: (stage) => {
+        if (stage === 'embed' || stage === 'output') progress.phase = stage;
+        renderChain(stage === 'output' ? 'output' : 'model');
+      },
+      onStep: ({ step, total: n, requested }) => {
+        Object.assign(progress, { phase: 'model', total: n, requested });
+        progress.points.push({ step, t: Date.now() });
         lastStep = step;
         total = n;
+      },
+      onPreview: ({ image }) => {
         const img = new Image();
-        img.onload = () => pageView.setRendering({ panelId: panel.id, url: image, width: img.naturalWidth, height: img.naturalHeight, label: `${step}/${n}` });
+        img.onload = () => pageView.setRendering({ ...pageView.rendering, panelId: panel.id, url: image, width: img.naturalWidth, height: img.naturalHeight });
         img.src = image;
-        tick();
       },
     });
     const target = P.locatePanel(project(), panel.id)?.panel;
@@ -1343,6 +1403,7 @@ async function renderPanel(mode, preset = state.preset) {
     else reportError(err, 'renderStopped');
   } finally {
     clearInterval(timer);
+    renderGenInfo(null);
     pageView.rendering = null;
     renderChain();
     endTask();

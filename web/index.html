@@ -265,6 +265,11 @@
         <span class="node-tag" data-i18n="diffusionTag"></span>
         <span class="icon-slot" data-icon="box"></span>
         <select id="imageModel" class="field" data-i18n-aria="imageModel"></select>
+        <div id="genInfo" class="gen-info" role="status" hidden>
+          <div class="gen-line"><span id="genTitle" class="gen-title"></span><span id="genPct" class="gen-pct"></span></div>
+          <div class="gen-bar"><span id="genBarFill"></span></div>
+          <div class="gen-line muted"><span id="genDetail"></span><span id="genTime"></span></div>
+        </div>
         <button id="modelToggle" type="button" class="btn icon-btn expand" aria-expanded="false" data-i18n-aria="modelSettings"></button>
       </div>
       <div id="modelBody" class="node-body" hidden>
@@ -282,12 +287,9 @@
         <label class="stack"><span data-i18n="negative"></span><input id="negative" class="field" type="text"></label>
         <p class="hint" data-i18n="negativeHint"></p>
         <label class="line"><span data-i18n="previewLabel"></span>
-          <select id="previewMode" class="field">
+          <select id="previewSteps" class="field">
+            <option value="1">50 · 75 · 90 %</option>
             <option value="0" data-i18n="previewOff"></option>
-            <option value="8">1/8</option>
-            <option value="4">1/4</option>
-            <option value="2">1/2</option>
-            <option value="1">1</option>
           </select>
         </label>
       </div>

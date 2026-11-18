@@ -68,7 +68,7 @@ target.refs = ['refA', 'refB'];
 (async () => {
   const store = fakeStore();
   const loaded = [];
-  const client = fakeClient({ previews: [1, 4, 8] });
+  const client = fakeClient({ previews: [1, 2, 10, 15] });
   const gen = new ComicGenerator({
     getClient: () => client,
     store,
@@ -107,7 +107,7 @@ target.refs = ['refA', 'refB'];
   // Requête de rendu complète.
   const req = await gen.buildRenderRequest({
     project, panelId: target.id, rect: { w: 1000, h: 600 }, mode: 'generate', preset: 'mp1',
-    options: { model: 'Qwen/Qwen-Image-2.1', prompt: null, steps: 40, guidance: 1, seed: null, scheduler: '', negative: '', previewEvery: 4, contextImages: 2, contextTexts: 3 },
+    options: { model: 'Qwen/Qwen-Image-2.1', prompt: null, steps: 40, guidance: 1, seed: null, scheduler: '', negative: '', previews: true, contextImages: 2, contextTexts: 3 },
   });
   const { body, sources } = req;
   assert.deepStrictEqual(sources.map((s) => `${s.n}:${s.kind}:${s.assetId}`), ['1:ref:refA', '2:ref:refB', '3:previous:render4', '4:previous:render6']);
@@ -115,7 +115,7 @@ target.refs = ['refA', 'refB'];
   assert.deepStrictEqual([body.width, body.height], P.presetSize('mp1', 1000, 600));
   assert(body.seed >= 0 && body.seed <= 2147483646);
   assert.strictEqual(body.app_id, 'tiinycomics');
-  assert.deepStrictEqual(body.stream_return_steps, [1, 4, 8, 12, 16, 20, 24, 28, 32, 36]);
+  assert.deepStrictEqual(body.stream_return_steps, [1, 2, 20, 30, 36]);
   assert(!('scheduler' in body) && !('negative_prompt' in body));
   assert(body.prompt.startsWith('A single comic panel in Franco-Belgian BD style.\nGlobal style: ink and watercolour.'));
   assert(body.prompt.includes('Panel 1-5: scene 5. [shown in <image3>] Panel 1-6: scene 6. Panel 2-1: scene 7. [shown in <image4>]'));
@@ -133,7 +133,7 @@ target.refs = ['refA', 'refB'];
   assert(req2.body.prompt.includes('<image1> is "Le chat"') && req2.body.prompt.includes('[shown in <image2>]'));
   assert.deepStrictEqual(req2.body.scheduler, { type: 'euler' });
   assert.strictEqual(req2.body.negative_prompt, 'blur');
-  assert.deepStrictEqual(req2.body.stream_return_steps, []);
+  assert.deepStrictEqual(req2.body.stream_return_steps, [1, 2, 20, 30, 36]);
   // Prompt amélioré conservé : utilisé tel quel.
   const req3 = await gen.buildRenderRequest({ project, panelId: target.id, rect: { w: 1000, h: 600 }, options: { model: 'm', prompt: 'my final prompt' } });
   assert.strictEqual(req3.body.prompt, 'my final prompt');
@@ -152,12 +152,12 @@ target.refs = ['refA', 'refB'];
   const previewsSeen = [];
   const out = await gen.render({
     project, panelId: target.id, rect: { w: 1000, h: 600 }, mode: 'generate', preset: 'draft',
-    options: { model: 'Qwen/Qwen-Image-2.1', seed: 42, previewEvery: 4, contextImages: 2, contextTexts: 3 },
+    options: { model: 'Qwen/Qwen-Image-2.1', seed: 42, previews: true, contextImages: 2, contextTexts: 3 },
     onStage: (s) => stagesSeen.push(s), onPreview: (p) => previewsSeen.push(p.step),
   });
   assert.deepStrictEqual(loaded, ['Qwen/Qwen-Image-2.1']);
   assert.deepStrictEqual(stagesSeen, ['embed', 'model', 'output']);
-  assert.deepStrictEqual(previewsSeen, [4, 8]);
+  assert.deepStrictEqual(previewsSeen, [10, 15]);
   assert.strictEqual(store.added.length, 1);
   assert.strictEqual(store.added[0].kind, 'render');
   const v = out.version;
@@ -238,7 +238,9 @@ target.refs = ['refA', 'refB'];
   assert(featherWeight(150, 100, g2.covered, 400, 200, 4) < 0.2, 'border feathered');
   // Bord collé au bord du canevas : pas de fondu de ce côté.
   assert.strictEqual(featherWeight(0, 50, { x: 0, y: 0, w: 100, h: 200 }, 400, 200, 4), 1);
-  assert.deepStrictEqual(streamSteps(8, 1), [1, 2, 3, 4, 5, 6, 7]);
+  assert.deepStrictEqual(streamSteps(20), [1, 2, 10, 15, 18]);
+  assert.deepStrictEqual(streamSteps(40, false), [1, 2]);
+  assert.deepStrictEqual(streamSteps(4), [1, 2, 3]);
 
   console.log('generate tests OK');
 })().catch((err) => {

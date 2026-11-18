@@ -41,6 +41,18 @@ class PageView {
     this.refresh();
   }
 
+  // Progression du rendu en cours, sans reconstruire la page (appelé plusieurs fois par seconde).
+  setProgress(progress, label) {
+    if (!this.rendering) return;
+    Object.assign(this.rendering, { progress, label });
+    const cell = this.el.querySelector(`.cell[data-panel-id="${this.rendering.panelId}"]`);
+    if (!cell) return;
+    const bar = cell.querySelector('.cell-progress');
+    if (bar) bar.style.width = `${progress}%`;
+    const badge = cell.querySelector('.cell-badge');
+    if (badge) badge.textContent = label;
+  }
+
   get webtoon() {
     return PV.formatOf(this.project).scroll;
   }
@@ -123,12 +135,15 @@ class PageView {
     if (preview) {
       cell.classList.add('rendering');
       if (preview.url) cell.classList.add('previewing');
-      if (preview.label) {
-        const badge = document.createElement('span');
-        badge.className = 'cell-badge';
-        badge.textContent = preview.label;
-        cell.append(badge);
-      }
+      const loading = document.createElement('div');
+      loading.className = 'cell-loading';
+      const bar = document.createElement('span');
+      bar.className = 'cell-progress';
+      bar.style.width = `${preview.progress || 0}%`;
+      const badge = document.createElement('span');
+      badge.className = 'cell-badge';
+      badge.textContent = preview.label || '';
+      cell.append(loading, bar, badge);
     }
     const num = document.createElement('span');
     num.className = 'cell-num';

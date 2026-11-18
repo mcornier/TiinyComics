@@ -81,7 +81,7 @@
 .cell-num { position: absolute; left: 7px; top: 7px; z-index: 2; min-width: 20px; padding: 1px 6px; border-radius: 6px; background: rgba(17, 17, 17, .78); color: #fff; font-size: 11px; font-weight: 600; text-align: center; pointer-events: none; }
 .cell-text { position: absolute; inset: 32px 12px 12px; overflow: hidden; color: #55585c; font-size: 12px; line-height: 1.35; pointer-events: none; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; }
 .cell-text.empty { color: #8a8d91; font-style: italic; }
-.cell.previewing img { filter: blur(6px); opacity: .8; }
+.cell.previewing img { filter: blur(2px); opacity: .9; }
 .cell.rendering::after { content: ""; position: absolute; inset: 0; z-index: 2; box-shadow: inset 0 0 0 3px var(--active); animation: glow-line 1.3s ease-in-out infinite; pointer-events: none; }
 .cell-badge { position: absolute; right: 7px; bottom: 7px; z-index: 2; padding: 1px 6px; border-radius: 6px; background: rgba(17, 17, 17, .72); color: #fff; font-size: 10px; font-variant-numeric: tabular-nums; pointer-events: none; }
 .cell.has-image.uncovered { background: repeating-linear-gradient(45deg, rgba(255, 0, 255, .3) 0 8px, #f6e9f6 8px 16px); }
@@ -246,4 +246,34 @@ body.library-collapsed .chain .library-dock { width: 64px; margin-right: 0; bord
 @media (prefers-reduced-motion: reduce) {
   .cell.rendering::after { animation: none; }
   .side-left, .stage, .library-dock { transition: none; }
+}
+
+/* Rendu en cours : balayage lumineux et anneau sur la case, barre de progression en bas. */
+.cell-loading { position: absolute; inset: 0; z-index: 2; pointer-events: none; background: linear-gradient(110deg, transparent 35%, rgba(255, 255, 255, .38) 50%, transparent 65%); background-size: 260% 100%; animation: cell-sweep 1.6s linear infinite; }
+.cell-loading::after { content: ""; position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; border: 3px solid rgba(17, 17, 17, .18); border-top-color: var(--active); border-radius: 50%; animation: cell-spin .9s linear infinite; }
+.cell.previewing .cell-loading { opacity: .55; }
+.cell.previewing .cell-loading::after { display: none; }
+.cell-progress { position: absolute; left: 0; bottom: 0; z-index: 3; height: 4px; width: 0; background: var(--active); box-shadow: 0 0 8px var(--active); transition: width .3s linear; pointer-events: none; }
+@keyframes cell-sweep { from { background-position: 130% 0; } to { background-position: -130% 0; } }
+@keyframes cell-spin { to { transform: rotate(360deg); } }
+
+/* Bloc Image pendant un rendu : la liste laisse place aux infos de génération. */
+.node-model.generating .node-row > :not(.node-tag):not(.icon-slot):not(.gen-info) { display: none; }
+.gen-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.gen-line { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; white-space: nowrap; }
+.gen-line > span { overflow: hidden; text-overflow: ellipsis; }
+.gen-line.muted { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.gen-title { font-weight: 600; }
+.gen-pct { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--active); }
+.gen-bar { height: 5px; border-radius: 3px; overflow: hidden; background: rgba(255, 255, 255, .12); }
+.gen-bar span { display: block; height: 100%; width: 0; border-radius: 3px; background: var(--active); transition: width .3s linear; }
+@media (prefers-reduced-motion: reduce) {
+  .cell-loading, .cell-loading::after { animation: none; }
+}
+
+/* Blocs latéraux : l'en-tête reste fixe, seul le contenu défile ; la barre se loge dans la marge du bloc
+   pour que les boutons de l'en-tête restent alignés avec le contenu. */
+@media (min-width: 1101px) {
+  .side-right > .block, .side-left { overflow: hidden; }
+  .side-right > .block > .block-body, .side-left > .block-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; margin: -4px -12px -14px -4px; padding: 4px 12px 14px 4px; }
 }
