@@ -230,25 +230,6 @@ class PageView {
     cell.append(num);
     cell.addEventListener('pointerdown', (e) => this._cellDown(e, panel, rect, scale, cell, pageIndex));
     cell.addEventListener('wheel', (e) => this._cellWheel(e, panel), { passive: false });
-    cell.addEventListener('dblclick', (e) => {
-      if (this.mode === 'sketch' && panel.id === this.selectedId) {
-        // Pendant le dessin, deux traits rapides font un double-clic : on l'ignore.
-        if (this.sketchTool !== 'select') return;
-        const box = cell.getBoundingClientRect();
-        const hit = ComicSketch.hitTest(panel.sketch?.items || [], e.clientX - box.left, e.clientY - box.top, box.width, box.height);
-        if (hit && hit.type !== 'stroke') {
-          this._editSketchText(panel, hit);
-          return;
-        }
-      }
-      if (this.mode === 'frame' && panel.id === this.selectedId) {
-        panel.placement = { zoom: 1, x: 0, y: 0 };
-        this.refresh();
-        this.onChange('placement');
-        return;
-      }
-      this.focusPanel(panel.id);
-    });
     return cell;
   }
 
@@ -267,8 +248,44 @@ class PageView {
 
   /* ---------- Sélection, échange, cadrage ---------- */
 
+  // Double-clic détecté sur deux appuis rapprochés : chaque clic redessine la page et remplace la case,
+  // si bien que le navigateur n'émet jamais d'événement dblclick sur la case.
+  _isDouble(key, e) {
+    const now = performance.now();
+    const last = this._lastDown;
+    const double = last && last.key === key && now - last.t < 450 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 10;
+    this._lastDown = double ? null : { key, t: now, x: e.clientX, y: e.clientY };
+    return double;
+  }
+
+  _cellDouble(e, panel) {
+    const cell = this.el.querySelector(`.cell[data-panel-id="${panel.id}"]`);
+    if (this.mode === 'sketch' && panel.id === this.selectedId && cell) {
+      const box = cell.getBoundingClientRect();
+      const hit = ComicSketch.hitTest(panel.sketch?.items || [], e.clientX - box.left, e.clientY - box.top, box.width, box.height);
+      if (hit && hit.type !== 'stroke') {
+        this._editSketchText(panel, hit);
+        return;
+      }
+    }
+    if (this.mode === 'frame' && panel.id === this.selectedId) {
+      panel.placement = { zoom: 1, x: 0, y: 0 };
+      this.refresh();
+      this.onChange('placement');
+      return;
+    }
+    this.focusPanel(panel.id);
+  }
+
   _cellDown(e, panel, rect, scale, cell, pageIndex) {
     if (e.button !== 0) return;
+    // Pendant le dessin, deux traits rapides ne font pas un double-clic.
+    const drawing = this.mode === 'sketch' && panel.id === this.selectedId && this.sketchTool !== 'select';
+    if (!drawing && this._isDouble(`cell:${panel.id}`, e)) {
+      e.preventDefault();
+      this._cellDouble(e, panel);
+      return;
+    }
     if (this.mode === 'sketch' && panel.id === this.selectedId) {
       this._sketchDown(e, panel, rect, scale, cell);
       return;
@@ -354,6 +371,11 @@ class PageView {
       if (e.button !== 0 || this.mode !== 'layout') return;
       e.preventDefault();
       e.stopPropagation();
+      // Double-clic : coupe une gouttière partagée (transpose le regroupement rangées / colonnes).
+      if (this._isDouble(`divider:${d.splitId}:${d.index}`, e)) {
+        this.onRegroup?.(page, d.splitId);
+        return;
+      }
       el.classList.add('active');
       const entry = PV.findNode(page, d.splitId);
       const { gutter } = PV.pageSpacing(this.project);
@@ -380,10 +402,6 @@ class PageView {
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', up);
       window.addEventListener('pointercancel', up);
-    });
-    // Double-clic : coupe une gouttière partagée (transpose le regroupement rangées / colonnes).
-    el.addEventListener('dblclick', () => {
-      if (this.mode === 'layout') this.onRegroup?.(page, d.splitId);
     });
     el.dataset.key = `${d.splitId}:${d.index}`;
     return el;
