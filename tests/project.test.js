@@ -66,4 +66,58 @@ assert.strictEqual(P.previousPanels(pr, order[0].panel.id).length, 0);
 const w = P.newProject({ format: 'webtoon' });
 w.pages[0].height = 5000;
 assert.strictEqual(P.pageSize(w, w.pages[0]).height, 5000);
+// Fusion : la case gardée reprend rendus, références et description de sa voisine.
+{
+  const proj = P.newProject({ format: 'bd' });
+  const page = proj.pages[0];
+  page.layout = P.LAYOUT_TEMPLATES.twoCols();
+  const [a, b] = P.pagePanels(page);
+  a.description = 'A';
+  b.description = 'B';
+  b.versions.push({ id: 'v1', assetId: 'x' });
+  b.current = 'v1';
+  b.refs.push('r1');
+  const kept = P.mergePanel(page, a.id);
+  assert.strictEqual(kept, a);
+  assert.strictEqual(page.layout.kind, 'panel');
+  assert.strictEqual(a.description, 'A\nB');
+  assert.deepStrictEqual(a.versions.map((v) => v.id), ['v1']);
+  assert.strictEqual(a.current, 'v1');
+  assert.deepStrictEqual(a.refs, ['r1']);
+  assert.strictEqual(P.mergePanel(page, a.id), null, 'nothing left to merge');
+}
+
+// Transposition : deux colonnes de deux cases deviennent deux rangées de deux cases, ordre de lecture gardé par rangée.
+{
+  const proj = P.newProject({ format: 'bd' });
+  const page = proj.pages[0];
+  page.layout = P.LAYOUT_TEMPLATES.twoCols();
+  const [left, right] = P.pagePanels(page);
+  const c = P.splitPanel(page, left.id, 'col');
+  const d = P.splitPanel(page, right.id, 'col');
+  assert.deepStrictEqual(P.pagePanels(page).map((p) => p.id), [left.id, c.id, right.id, d.id]);
+  const target = P.transposableFor(page, P.findLeaf(page, c.id).node.id);
+  assert.strictEqual(target.id, page.layout.id);
+  assert(P.transposeSplit(page, target.id));
+  assert.strictEqual(page.layout.dir, 'col');
+  assert.deepStrictEqual(P.pagePanels(page).map((p) => p.id), [left.id, right.id, c.id, d.id]);
+  assert(P.transposeSplit(page, page.layout.id), 'and back');
+  assert.strictEqual(page.layout.dir, 'row');
+}
+
+// Webtoon : ajout d'une rangée en bas, la bande grandit d'autant.
+{
+  const proj = P.newProject({ format: 'webtoon' });
+  const page = proj.pages[0];
+  const before = P.pageSize(proj, page).height;
+  const count = P.pagePanels(page).length;
+  const added = P.appendRow(proj, page, 600);
+  assert(added);
+  assert.strictEqual(P.pageSize(proj, page).height, before + 600);
+  assert.strictEqual(P.pagePanels(page).length, count + 1);
+  assert.strictEqual(P.pagePanels(page).at(-1).id, added.id);
+  const sum = page.layout.ratios.reduce((x, y) => x + y, 0);
+  assert(Math.abs(sum - 1) < 1e-9);
+}
+
 console.log('project tests: OK');

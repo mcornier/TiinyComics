@@ -299,3 +299,12 @@ body.right-collapsed .page-bar-wrap { margin-right: calc(var(--right-w) + var(--
 .sketch-text { position: absolute; z-index: 6; min-height: 0; padding: 6px 8px; resize: none; font-size: 13px; line-height: 1.3; background: rgba(12, 14, 18, .92); }
 .opt.check { gap: 8px; cursor: pointer; }
 .opt.check input { accent-color: var(--active); }
+
+/* Champ de hauteur de bande à la taille des boutons de la barre. */
+.page-bar #stripHeight { height: 30px; min-height: 30px; padding: 2px 8px; }
+/* Webtoon : bouton d'ajout de rangée sous chaque bande. */
+.strip-add { position: absolute; left: 50%; bottom: -54px; z-index: 4; transform: translateX(-50%); white-space: nowrap; background: rgba(12, 14, 18, .72); }
+.viewport.webtoon .page { margin-bottom: 44px; }
+
+/* Stylet et tactile : sur ces zones, un glissé dessine, cadre ou redimensionne au lieu de faire défiler la page. */
+.mode-sketch .cell.sketching, .mode-frame .cell.selected, .divider, .strip-handle { touch-action: none; }

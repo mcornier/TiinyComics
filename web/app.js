@@ -522,6 +522,7 @@ function renderPage() {
   $('removePageBtn').disabled = n <= 1;
   setIconLabel($('addPageBtn'), 'file-plus', t(webtoon ? 'addStrip' : 'addPage'));
   renderPageList();
+  renderLayoutButtons();
   fitPageBar();
 }
 
@@ -584,7 +585,10 @@ function selectPanel(panelId) {
   const pageChanged = found.pageIndex !== state.pageIndex;
   state.pageIndex = found.pageIndex;
   if (pageChanged || !pageView.drag) renderPage();
-  else renderPageList();
+  else {
+    renderPageList();
+    renderLayoutButtons();
+  }
   renderPanelEditor();
 }
 
@@ -1293,6 +1297,51 @@ async function enhancePanel() {
   return null;
 }
 
+/* ---------- Fusion, regroupement, rangées ---------- */
+
+function mergeSelected() {
+  const page = project().pages[state.pageIndex];
+  const kept = state.selectedId && P.mergePanel(page, state.selectedId);
+  if (!kept) return setStatus(t('mergeNone'), { error: true });
+  touch();
+  renderAll();
+  setStatus(t('merged'));
+  return null;
+}
+
+function regroup(page, nodeId) {
+  const target = P.transposableFor(page, nodeId);
+  if (!target || !P.transposeSplit(page, target.id)) return setStatus(t('regroupNone'), { error: true });
+  touch();
+  renderAll();
+  setStatus(t('regrouped'));
+  return null;
+}
+
+function addRow(pageIndex) {
+  const page = project().pages[pageIndex];
+  const width = P.pageSize(project(), page).width;
+  const panel = P.appendRow(project(), page, Math.round(width * 0.75));
+  if (!panel) return setStatus(t('stripMax'), { error: true });
+  state.pageIndex = pageIndex;
+  state.selectedId = panel.id;
+  touch();
+  renderAll();
+  return null;
+}
+
+// Boutons de la barre de page qui dépendent de la case sélectionnée.
+function renderLayoutButtons() {
+  const page = project()?.pages[state.pageIndex];
+  const entry = page && state.selectedId && P.findLeaf(page, state.selectedId);
+  const parent = entry?.parent;
+  const i = entry?.index ?? -1;
+  const neighbour = parent && (parent.children[i + 1] || parent.children[i - 1]);
+  $('mergePanelBtn').disabled = !(neighbour && neighbour.kind === 'panel');
+  $('regroupBtn').disabled = !(entry && P.transposableFor(page, entry.node.id));
+  $('removePanelBtn').disabled = !parent;
+}
+
 /* ---------- Croquis ---------- */
 
 const MODE_HINTS = { layout: 'modeLayoutHint', frame: 'modeFrameHint', sketch: 'modeSketchHint' };
@@ -1779,6 +1828,12 @@ function bindEvents() {
   $('splitColsBtn').addEventListener('click', () => splitSelected('row'));
   $('splitRowsBtn').addEventListener('click', () => splitSelected('col'));
   $('removePanelBtn').addEventListener('click', removeSelected);
+  $('mergePanelBtn').addEventListener('click', mergeSelected);
+  $('regroupBtn').addEventListener('click', () => {
+    const page = project().pages[state.pageIndex];
+    const leafEntry = state.selectedId && P.findLeaf(page, state.selectedId);
+    if (leafEntry) regroup(page, leafEntry.node.id);
+  });
   $('prevPageBtn').addEventListener('click', () => goToPage(state.pageIndex - 1));
   $('nextPageBtn').addEventListener('click', () => goToPage(state.pageIndex + 1));
   $('addPageBtn').addEventListener('click', addPage);
@@ -1916,6 +1971,8 @@ async function start() {
       }
     },
     onSwap: swapPanels,
+    onAddRow: addRow,
+    onRegroup: (page, nodeId) => regroup(page, nodeId),
     onZoom: (zoom) => { $('zoomLabel').textContent = `${Math.round(zoom * 100)} %`; },
   });
   $('zoomOutBtn').addEventListener('click', () => pageView.setZoom(pageView.zoom / 1.25));

@@ -8,13 +8,15 @@ const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 5;
 
 class PageView {
-  constructor(container, { store, onSelect, onChange, onSwap, onZoom }) {
+  constructor(container, { store, onSelect, onChange, onSwap, onZoom, onAddRow, onRegroup }) {
     this.el = container;
     this.store = store;
     this.onSelect = onSelect;
     this.onChange = onChange;
     this.onSwap = onSwap;
     this.onZoom = onZoom;
+    this.onAddRow = onAddRow;
+    this.onRegroup = onRegroup;
     // Zoom de la page, relatif à l'ajustement (1 = la page tient dans la zone ; en webtoon, la largeur par défaut).
     this.zoom = 1;
     this.fitHeight = null;
@@ -121,7 +123,16 @@ class PageView {
     const numbers = new Map(PV.pagePanels(page).map((p, i) => [p.id, i + 1]));
     for (const rect of layout.panels) el.append(this._renderCell(rect, scale, border, numbers.get(rect.panelId), pageIndex));
     for (const d of layout.dividers) el.append(this._renderDivider(page, d, scale));
-    if (this.webtoon) el.append(this._renderStripHandle(page, scale));
+    if (this.webtoon) {
+      el.append(this._renderStripHandle(page, scale));
+      // Ajout d'une rangée de cases en bas de la bande.
+      const add = document.createElement('button');
+      add.type = 'button';
+      add.className = 'strip-add btn small';
+      add.innerHTML = `${iconSvg('plus')}<span>${t('addRow')}</span>`;
+      add.addEventListener('click', () => this.onAddRow?.(pageIndex));
+      el.append(add);
+    }
     return el;
   }
 
@@ -331,6 +342,10 @@ class PageView {
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', up);
       window.addEventListener('pointercancel', up);
+    });
+    // Double-clic : coupe une gouttière partagée (transpose le regroupement rangées / colonnes).
+    el.addEventListener('dblclick', () => {
+      if (this.mode === 'layout') this.onRegroup?.(page, d.splitId);
     });
     el.dataset.key = `${d.splitId}:${d.index}`;
     return el;

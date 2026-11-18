@@ -229,6 +229,95 @@ function collapse(page, splitNode) {
   replaceNode(page, splitNode, only, parent, index);
 }
 
+// Fusionne une case avec sa voisine dans le même découpage (la suivante, sinon la précédente).
+// Rien n'est perdu : la case gardée reprend les rendus, les références et la description de l'autre ;
+// le croquis de la case absorbée est archivé avec elle.
+function mergePanel(page, panelId) {
+  const entry = findLeaf(page, panelId);
+  if (!entry || !entry.parent) return null;
+  const { parent, index } = entry;
+  const other = index + 1 < parent.children.length ? index + 1 : index - 1;
+  const neighbour = parent.children[other];
+  if (!neighbour || neighbour.kind !== 'panel') return null;
+  const keep = entry.node.panel;
+  const gone = neighbour.panel;
+  keep.versions.push(...gone.versions);
+  if (!keep.current && gone.current) {
+    keep.current = gone.current;
+    keep.placement = { ...gone.placement };
+  }
+  keep.description = [keep.description, gone.description].map((d) => (d || '').trim()).filter(Boolean).join('\n');
+  keep.refs = [...new Set([...keep.refs, ...gone.refs])];
+  if (gone.sketch || gone.archive?.length) {
+    keep.archive = [...(keep.archive || []), ...(gone.archive || []), { panelId: gone.id, description: gone.description, sketch: gone.sketch }];
+  }
+  if (!keep.sketch && gone.sketch) keep.sketch = gone.sketch;
+  parent.ratios[index] += parent.ratios[other];
+  parent.children.splice(other, 1);
+  parent.ratios.splice(other, 1);
+  if (parent.children.length === 1) collapse(page, parent);
+  return keep;
+}
+
+// Un découpage dont tous les enfants coupent dans l'autre sens en autant de parts peut être « transposé » :
+// des colonnes qui partagent leurs gouttières horizontales deviennent des rangées indépendantes, et inversement.
+function canTranspose(node) {
+  if (!node || node.kind !== 'split' || node.children.length < 2) return false;
+  const k = node.children[0].kind === 'split' ? node.children[0].children.length : 0;
+  return k >= 2 && node.children.every((c) => c.kind === 'split' && c.dir !== node.dir && c.children.length === k);
+}
+
+function transposeSplit(page, splitId) {
+  const entry = findNode(page, splitId);
+  if (!entry || !canTranspose(entry.node)) return false;
+  const s = entry.node;
+  const k = s.children[0].children.length;
+  const outer = [];
+  const outerRatios = [];
+  for (let i = 0; i < k; i += 1) {
+    outer.push(split(s.dir, s.children.map((c) => c.children[i]), [...s.ratios]));
+    outerRatios.push(s.children.reduce((sum, c) => sum + c.ratios[i], 0) / s.children.length);
+  }
+  const replacement = split(s.children[0].dir, outer, outerRatios);
+  const { parent, index } = entry;
+  if (parent && parent.dir === replacement.dir) {
+    const share = parent.ratios[index];
+    parent.children.splice(index, 1, ...replacement.children);
+    parent.ratios.splice(index, 1, ...replacement.ratios.map((r) => r * share));
+  } else replaceNode(page, s, replacement, parent, index);
+  return true;
+}
+
+// Premier découpage transposable en remontant depuis un nœud (case ou découpage).
+function transposableFor(page, nodeId) {
+  const parents = new Map();
+  for (const e of walk(page.layout)) if (e.parent) parents.set(e.node.id, e.parent);
+  let node = findNode(page, nodeId)?.node;
+  while (node) {
+    if (canTranspose(node)) return node;
+    node = parents.get(node.id);
+  }
+  return null;
+}
+
+// Webtoon : ajoute une rangée d'une case en bas de la bande, sans changer la taille des cases existantes.
+function appendRow(project, page, addHeight) {
+  const height = pageSize(project, page).height;
+  const total = clamp(height + addHeight, WEBTOON_MIN_HEIGHT, WEBTOON_MAX_HEIGHT);
+  const added = total - height;
+  if (added <= 0) return null;
+  const fresh = leaf();
+  const root = page.layout;
+  if (root.kind === 'split' && root.dir === 'col') {
+    root.ratios = [...root.ratios.map((r) => (r * height) / total), added / total];
+    root.children.push(fresh);
+  } else {
+    page.layout = split('col', [root, fresh], [height, added]);
+  }
+  page.height = total;
+  return fresh.panel;
+}
+
 // Déplace la séparation entre les enfants `index` et `index + 1` d'un découpage.
 // `delta` est exprimé en fraction de la taille du découpage.
 function moveDivider(page, splitId, index, delta) {
@@ -403,6 +492,7 @@ function projectAssetIds(project) {
       for (const key of ['assetId', 'sketchAssetId', 'maskAssetId']) if (v[key]) ids.add(v[key]);
     }
     if (panel.sketch?.assetId) ids.add(panel.sketch.assetId);
+    for (const a of panel.archive || []) if (a.sketch?.assetId) ids.add(a.sketch.assetId);
     for (const r of panel.refs) ids.add(r);
   }
   return ids;
@@ -412,7 +502,7 @@ const TC_PROJECT = {
   FORMATS, FORMAT_IDS, LAYOUT_TEMPLATES, PRESETS, UPSCALE_TARGETS, WEBTOON_MIN_HEIGHT, WEBTOON_MAX_HEIGHT,
   uid, clamp, formatOf, pageSize, pageSpacing, newPanel, newPage, newProject, defaultTemplate,
   walk, findLeaf, findNode, locatePanel, pagePanels, readingOrder, previousPanels,
-  splitPanel, removePanel, moveDivider, swapPanels, applyTemplate, computeLayout,
+  splitPanel, removePanel, mergePanel, canTranspose, transposeSplit, transposableFor, appendRow, moveDivider, swapPanels, applyTemplate, computeLayout,
   fitsTiiny, latentTokens, generationRatio, sizeForArea, presetSize, upscaleAvailable,
   placeImage, hasUncovered, currentVersion, panelLabel, projectAssetIds,
 };
