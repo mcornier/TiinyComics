@@ -110,6 +110,7 @@
         <button type="button" data-mode="layout" data-icon="mouse-pointer-2" data-i18n="modeLayout" data-i18n-title="modeLayout"></button>
         <button type="button" data-mode="frame" data-icon="move" data-i18n="modeFrame" data-i18n-title="modeFrame"></button>
         <button type="button" data-mode="sketch" data-icon="pen-line" data-i18n="modeSketch" data-i18n-title="modeSketch"></button>
+        <button type="button" data-mode="retouch" data-icon="wand-sparkles" data-i18n="modeRetouch" data-i18n-title="modeRetouch"></button>
       </div>
       <span class="bar-sep keep"></span>
       <span id="layoutTools" class="bar-group">
@@ -136,6 +137,27 @@
         <button id="sketchUndoBtn" type="button" class="btn icon-btn" data-icon="undo-2" data-i18n-title="sketchUndo" data-i18n-aria="sketchUndo"></button>
         <button id="sketchRedoBtn" type="button" class="btn icon-btn" data-icon="redo-2" data-i18n-title="sketchRedo" data-i18n-aria="sketchRedo"></button>
       </span>
+      <!-- Retouche : outils de l'éditeur d'image (repris de TiinyPaint) -->
+      <span id="editTools" class="bar-group" hidden>
+        <span id="editToolButtons" class="tools" role="toolbar">
+          <button type="button" data-tool="mask" data-icon="paintbrush" data-i18n-title="toolMask" data-i18n-aria="toolMask"></button>
+          <button type="button" data-tool="erase" data-icon="eraser" data-i18n-title="toolErase" data-i18n-aria="toolErase"></button>
+          <button type="button" data-tool="lasso" data-icon="lasso" data-i18n-title="toolLasso" data-i18n-aria="toolLasso"></button>
+          <button type="button" data-tool="rect" data-icon="square-dashed" data-i18n-title="toolRect" data-i18n-aria="toolRect"></button>
+          <button type="button" data-tool="restore" data-icon="history" data-i18n-title="toolRestore" data-i18n-aria="toolRestore"></button>
+          <button type="button" data-tool="stamp" data-icon="stamp" data-i18n-title="toolStamp" data-i18n-aria="toolStamp"></button>
+          <button type="button" data-tool="crop" data-icon="crop" data-i18n-title="toolCrop" data-i18n-aria="toolCrop"></button>
+        </span>
+        <span class="bar-sep keep"></span>
+        <button id="undoBtn" type="button" class="btn icon-btn" data-icon="undo-2" data-i18n-title="editUndo" data-i18n-aria="editUndo"></button>
+        <button id="redoBtn" type="button" class="btn icon-btn" data-icon="redo-2" data-i18n-title="editRedo" data-i18n-aria="editRedo"></button>
+        <button id="zoomResetBtn" type="button" class="btn icon-btn" data-icon="maximize" data-i18n-title="zoomReset" data-i18n-aria="zoomReset"></button>
+        <span class="bar-sep keep"></span>
+        <button id="retouchSaveBtn" type="button" class="btn icon-btn" data-icon="save" data-i18n-title="retouchSave" data-i18n-aria="retouchSave"></button>
+        <button id="retouchGenBtn" type="button" class="btn small primary" data-icon="play" data-i18n="generate"></button>
+        <button id="retouchStopBtn" type="button" class="btn small danger" data-icon="square" data-i18n="stop" hidden></button>
+        <button id="closeEditorBtn" type="button" class="btn icon-btn" data-icon="x" data-i18n-title="closeRetouch" data-i18n-aria="closeRetouch"></button>
+      </span>
       <span class="spacer"></span>
       <label id="stripHeightBox" class="opt" data-i18n-title="stripHeight" hidden><span class="icon-slot small" data-icon="move-vertical"></span><span class="bar-label" data-i18n="stripHeight"></span>
         <input id="stripHeight" class="field num" type="number" min="400" max="20000" step="100"></label>
@@ -152,9 +174,56 @@
       </span>
     </div>
 
+    <!-- Retouche : réglages de l'outil actif, sur une ligne sous la barre de page -->
+    <div id="editOptions" class="edit-options glass" hidden>
+      <label class="opt" data-for="brush" data-i18n-title="brush"><span class="opt-label" data-i18n="brush"></span>
+        <input id="brushSize" type="range" min="4" max="500" value="64"><output id="brushValue"></output></label>
+      <label class="opt" data-for="mask" data-i18n-title="feather"><span class="opt-label" data-i18n="feather"></span>
+        <input id="feather" type="range" min="0" max="80" value="16"><output id="featherValue"></output></label>
+      <label class="opt check" data-for="mask" data-i18n-title="showMask"><input id="showMask" type="checkbox" checked><span class="icon-slot small" data-icon="eye"></span><span class="opt-label" data-i18n="showMask"></span></label>
+      <button id="invertBtn" type="button" class="btn small" data-for="mask" data-icon="repeat" data-i18n="invert" data-i18n-title="invert"></button>
+      <button id="clearMaskBtn" type="button" class="btn small" data-for="mask" data-icon="circle-off" data-i18n="clearMask" data-i18n-title="clearMask"></button>
+      <label class="opt" data-for="mask" data-i18n-title="method"><span class="opt-label" data-i18n="method"></span>
+        <select id="method" class="field compact">
+          <option value="fill" data-i18n="methodFill"></option>
+          <option value="keep" data-i18n="methodKeep"></option>
+        </select></label>
+      <label class="opt" data-for="mask" data-i18n-title="scope"><span class="opt-label" data-i18n="scope"></span>
+        <select id="scope" class="field compact">
+          <option value="crop" data-i18n="scopeCrop"></option>
+          <option value="full" data-i18n="scopeFull"></option>
+        </select></label>
+      <label class="opt" data-for="restore" data-i18n-title="source"><span class="opt-label" data-i18n="source"></span>
+        <select id="source" class="field compact"></select></label>
+      <button id="copySourceBtn" type="button" class="btn small" data-for="restore" data-icon="copy" data-i18n="copyFromSource" data-i18n-title="copyFromSource"></button>
+      <label class="opt" data-for="crop" data-i18n-title="cropRatio"><span class="opt-label" data-i18n="cropRatio"></span>
+        <select id="cropRatio" class="field compact">
+          <option value="" data-i18n="cropFree"></option>
+          <option value="1:1">1:1</option>
+          <option value="4:3">4:3</option>
+          <option value="3:4">3:4</option>
+          <option value="3:2">3:2</option>
+          <option value="2:3">2:3</option>
+          <option value="16:9">16:9</option>
+          <option value="9:16">9:16</option>
+        </select></label>
+      <button id="applyCropBtn" type="button" class="btn small" data-for="crop" data-icon="check" data-i18n="applyCrop" data-i18n-title="applyCrop"></button>
+      <span class="opt" data-for="crop"><span class="opt-label" data-i18n="editExtend"></span>
+        <button type="button" class="btn small" data-extend="left" data-i18n="left" data-i18n-title="editExtendLeft"></button>
+        <button type="button" class="btn small" data-extend="right" data-i18n="right" data-i18n-title="editExtendRight"></button>
+        <button type="button" class="btn small" data-extend="top" data-i18n="top" data-i18n-title="editExtendTop"></button>
+        <button type="button" class="btn small" data-extend="bottom" data-i18n="bottom" data-i18n-title="editExtendBottom"></button></span>
+      <button id="rotateBtn" type="button" class="btn small" data-for="crop" data-icon="rotate-cw" data-i18n="rotate" data-i18n-title="rotate"></button>
+      <button id="flipBtn" type="button" class="btn small" data-for="crop" data-icon="flip-horizontal" data-i18n="flip" data-i18n-title="flip"></button>
+    </div>
+
     </div>
 
     <div id="viewport" class="viewport"></div>
+    <!-- Retouche : l'image de la case en pleine résolution, avec le zoom de l'éditeur -->
+    <div id="retouchView" class="canvas retouch-view" hidden>
+      <canvas id="editCanvas" class="edit-canvas"></canvas>
+    </div>
     <p id="status" class="status" role="status"></p>
   </section>
 
@@ -189,12 +258,22 @@
         </div>
         <div class="block-body">
 
+      <!-- Retouche : visible seulement dans ce mode -->
+      <div class="section" id="retouchSection" hidden>
+        <p class="section-title"><span class="icon-slot small" data-icon="paintbrush"></span><span data-i18n="retouchSection"></span></p>
+        <label class="stack"><span data-i18n="retouchPromptLabel"></span>
+          <textarea id="retouchPrompt" class="field" rows="3" data-i18n-placeholder="retouchPromptPlaceholder"></textarea></label>
+        <label class="stack"><span><span class="icon-slot small" data-icon="text-cursor-input"></span> <span data-i18n="retouchTextLabel"></span></span>
+          <textarea id="retouchText" class="field" rows="2" data-i18n-placeholder="retouchTextPlaceholder"></textarea></label>
+        <p id="retouchHint" class="hint"></p>
+      </div>
+
       <div class="section grow">
         <label class="section-title" for="description"><span class="icon-slot small" data-icon="type"></span><span data-i18n="sceneLabel"></span></label>
         <textarea id="description" class="field" data-i18n-placeholder="scenePlaceholder"></textarea>
       </div>
 
-      <div class="section">
+      <div class="section hide-retouch">
         <div class="section-head">
           <span class="section-title"><span class="icon-slot small" data-icon="wand-sparkles"></span><span data-i18n="finalPrompt"></span></span>
           <span class="section-actions">
@@ -216,7 +295,7 @@
         <p id="noPanelRefs" class="hint" data-i18n="noPanelRefs"></p>
       </div>
 
-      <div class="section">
+      <div class="section hide-retouch">
         <div class="section-head">
           <span class="section-title"><span class="icon-slot small" data-icon="layers"></span><span data-i18n="contextLabel"></span></span>
           <label class="opt"><span data-i18n="contextImagesCount"></span>
@@ -226,7 +305,7 @@
         <p id="contextHint" class="hint"></p>
       </div>
 
-      <div class="section" id="sketchSection">
+      <div class="section hide-retouch" id="sketchSection">
         <div class="section-head">
           <span class="section-title"><span class="icon-slot small" data-icon="pen-line"></span><span data-i18n="sketchLabel"></span> <span id="sketchCount" class="muted"></span></span>
           <span class="section-actions">
@@ -269,7 +348,10 @@
           <button type="button" class="btn small" data-upscale="mp2">2 MP</button>
           <button type="button" class="btn small" data-upscale="mp4">4 MP</button>
         </div>
-        <button id="extendBtn" type="button" class="btn small" data-icon="expand" data-i18n="extend"></button>
+        <div class="row wrap">
+          <button id="extendBtn" type="button" class="btn small" data-icon="expand" data-i18n="extend"></button>
+          <button id="retouchBtn" type="button" class="btn small" data-icon="paintbrush" data-i18n="retouchImage"></button>
+        </div>
         <p id="improveHint" class="hint"></p>
       </div>
 

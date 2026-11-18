@@ -479,6 +479,10 @@ function touch({ now = false } = {}) {
 }
 
 async function openProject(p) {
+  if (state.mode === 'retouch') {
+    if (retouchLocked()) return;
+    await setMode(retouch.prevMode);
+  }
   state.project = p;
   state.pageIndex = 0;
   state.selectedId = P.pagePanels(p.pages[0])[0]?.id || null;
@@ -569,6 +573,7 @@ function renderPageList() {
 }
 
 function goToPage(index) {
+  if (retouchLocked()) return;
   const p = project();
   state.pageIndex = P.clamp(index, 0, p.pages.length - 1);
   const panels = P.pagePanels(p.pages[state.pageIndex]);
@@ -579,6 +584,7 @@ function goToPage(index) {
 }
 
 function selectPanel(panelId) {
+  if (retouchLocked()) return;
   const found = P.locatePanel(project(), panelId);
   if (!found) return;
   state.selectedId = panelId;
@@ -708,6 +714,7 @@ function renderPanelEditor() {
   for (const el of editor.querySelectorAll('textarea, button, input')) if (!el.classList.contains('collapse-btn')) el.disabled = !sel;
   if (!sel) {
     $('panelTitle').textContent = t('noPanel');
+    syncRetouch();
     return;
   }
   const { panel } = sel;
@@ -733,6 +740,7 @@ function renderPanelEditor() {
   $('nextPanelBtn').disabled = i >= order.length - 1;
   const version = P.currentVersion(panel);
   setAmbient(version ? store.cachedUrl(version.assetId) : null);
+  syncRetouch();
 }
 
 function setAmbient(url) {
@@ -880,13 +888,17 @@ function renderImprove() {
   const sel = selectedPanel();
   const version = P.currentVersion(sel.panel);
   const rect = selectedRect();
+  // En mode Retouche, l'image est dans l'éditeur : agrandir ou étendre attend la fin de la retouche.
+  const retouching = state.mode === 'retouch';
   for (const b of document.querySelectorAll('[data-upscale]')) {
     const ok = !!version && P.upscaleAvailable(b.dataset.upscale, version.width, version.height);
-    b.disabled = !ok || state.busy;
+    b.disabled = !ok || state.busy || retouching;
     b.title = !version ? t('noImageYet') : ok ? '' : t('upscaleOff');
   }
   const uncovered = !!version && rect && P.hasUncovered(version.width, version.height, rect.w, rect.h, sel.panel.placement);
-  $('extendBtn').disabled = !uncovered || state.busy;
+  $('extendBtn').disabled = !uncovered || state.busy || retouching;
+  $('retouchBtn').disabled = !version || state.busy || retouching;
+  $('retouchBtn').title = version ? '' : t('retouchNoImage');
   $('improveHint').textContent = !version ? t('noImageYet') : uncovered ? '' : t('extendNone');
 }
 
@@ -912,6 +924,7 @@ function renderVersions() {
     tag.textContent = `${t(`versionMode_${mode}`)} · ${Math.round((v.width * v.height) / 1e5) / 10}`;
     b.append(tag);
     b.addEventListener('click', () => {
+      if (retouchLocked()) return;
       panel.current = v.id;
       touch();
       renderPage();
@@ -1118,6 +1131,8 @@ async function deleteProject() {
   const p = project();
   if (!window.confirm(t('confirmDeleteProject', { t: p.title || t('untitled') }))) return;
   clearTimeout(saveTimer);
+  // Le projet disparaît : ses retouches en cours aussi.
+  retouch.saved = null;
   await store.deleteProject(p.id);
   const rest = await store.listProjects();
   if (rest.length) await openProject(await store.loadProject(rest[0].id));
@@ -1215,6 +1230,7 @@ function refreshActionButtons() {
   const noPanel = !state.selectedId;
   refreshActionButton($('enhanceBtn'), enhanceBlocker(), state.busy || !connectionLabel || noPanel);
   refreshActionButton($('generateBtn'), generateBlocker(), !connectionLabel || noPanel);
+  refreshActionButton($('retouchGenBtn'), generateBlocker(), !connectionLabel || noPanel);
 }
 
 function flashNode({ node: id, message }) {
@@ -1344,7 +1360,7 @@ function renderLayoutButtons() {
 
 /* ---------- Croquis ---------- */
 
-const MODE_HINTS = { layout: 'modeLayoutHint', frame: 'modeFrameHint', sketch: 'modeSketchHint' };
+const MODE_HINTS = { layout: 'modeLayoutHint', frame: 'modeFrameHint', sketch: 'modeSketchHint', retouch: 'modeRetouchHint' };
 
 // Barre de page : on retire les libellés, puis les éléments secondaires, tant qu'elle déborde.
 const BAR_LEVELS = ['bar-icons', 'bar-tight', 'bar-tiny', 'bar-min'];
@@ -1357,15 +1373,50 @@ function fitPageBar() {
   }
 }
 
-function setMode(mode) {
+// Le mode Retouche remplace la vue de page par l'éditeur d'image ; en le quittant, les retouches non
+// enregistrées deviennent une nouvelle version.
+async function setMode(mode) {
+  if (mode === state.mode && mode === 'retouch') return;
+  if (mode === 'retouch') {
+    const sel = selectedPanel();
+    if (!sel || !P.currentVersion(sel.panel)) {
+      setStatus(t(sel ? 'retouchNoImage' : 'selectPanelFirst'), { error: true });
+      return;
+    }
+    retouch.prevMode = state.mode;
+  }
+  if (state.mode === 'retouch' && mode !== 'retouch') {
+    if (retouchLocked()) return;
+    await retouch.queue;
+    await saveRetouch({ quiet: true });
+    Object.assign(retouch, { panelId: null, versionId: null, saved: null });
+  }
   state.mode = mode;
+  const retouching = mode === 'retouch';
   for (const x of $('modes').children) x.setAttribute('aria-pressed', String(x.dataset.mode === mode));
-  $('layoutTools').hidden = mode === 'sketch';
+  $('layoutTools').hidden = mode === 'sketch' || retouching;
   $('sketchTools').hidden = mode !== 'sketch';
+  showRetouch(retouching);
   pageView.sketchSel = null;
   pageView.setMode(mode);
   fitPageBar();
-  setStatus(t(MODE_HINTS[mode]));
+  if (retouching) {
+    setStatus(t('retouchLoading'));
+    let loaded = false;
+    await retouchTask(async () => { loaded = await loadRetouch(selectedPanel().panel); });
+    if (!loaded) {
+      retouch.saved = null;
+      setMode(retouch.prevMode);
+      setStatus(t('retouchNoImage'), { error: true });
+      return;
+    }
+    fitEditOptions();
+    setStatus(t('modeRetouchHint'));
+  } else {
+    renderPage();
+    setStatus(t(MODE_HINTS[mode]));
+  }
+  if (state.selectedId) renderPanelEditor();
 }
 
 function setSketchTool(tool) {
@@ -1414,6 +1465,413 @@ async function prepareSketch(panel, rect) {
   panel.sketch.assetId = asset.id;
   panel.sketch.sig = sig;
   await touch({ now: true });
+}
+
+/* ---------- Retouche ---------- */
+
+// Éditeur d'image de TiinyPaint (editor.js) ouvert sur la version actuelle de la case sélectionnée.
+// `saved` : copie de l'image au dernier enregistrement, pour savoir s'il reste des modifications à garder.
+let editor = null;
+const retouch = { panelId: null, versionId: null, saved: null, running: false, prevMode: 'layout', queue: Promise.resolve() };
+
+// Réglages affichés pour chaque outil (attribut data-for de la ligne de réglages), comme dans TiinyPaint.
+const TOOL_OPTIONS = {
+  mask: ['brush', 'mask'],
+  erase: ['brush', 'mask'],
+  lasso: ['mask'],
+  rect: ['mask'],
+  restore: ['brush', 'restore'],
+  stamp: ['brush'],
+  crop: ['crop'],
+};
+
+// Ligne de réglages : on retire les libellés, puis on resserre, tant qu'elle déborde.
+const OPTION_LEVELS = ['opt-icons', 'opt-tight'];
+function fitEditOptions() {
+  const row = $('editOptions');
+  if (row.hidden) return;
+  row.classList.remove(...OPTION_LEVELS);
+  for (const level of OPTION_LEVELS) {
+    if (row.scrollWidth <= row.clientWidth + 1) break;
+    row.classList.add(level);
+  }
+}
+
+function retouchLocked() {
+  if (!retouch.running) return false;
+  setStatus(t('retouchBusy'), { error: true });
+  return true;
+}
+
+// Les chargements et enregistrements de l'éditeur passent l'un après l'autre.
+function retouchTask(task) {
+  retouch.queue = retouch.queue.then(task).catch((err) => reportError(err, 'cancelled'));
+  return retouch.queue;
+}
+
+function setEditTool(tool) {
+  editor.tool = tool;
+  if (tool !== 'crop') editor.crop = null;
+  for (const b of $('editToolButtons').children) b.setAttribute('aria-pressed', String(b.dataset.tool === tool));
+  const groups = TOOL_OPTIONS[tool] || [];
+  for (const el of $('editOptions').querySelectorAll('[data-for]')) el.hidden = !groups.includes(el.dataset.for);
+  if (editor.base) setStatus(`${t(`tool${tool[0].toUpperCase()}${tool.slice(1)}Hint`)} ${t('editorHint', { w: editor.width, h: editor.height })}`);
+  fitEditOptions();
+  editor.redraw();
+}
+
+// Libellé des boutons Générer (celui de la case et celui de la barre) ; data-i18n le garde au changement de langue.
+function setGenerateLabels(key) {
+  for (const id of ['generateBtn', 'retouchGenBtn']) {
+    const span = $(id).querySelector('span');
+    if (!span) continue;
+    span.dataset.i18n = key;
+    span.textContent = t(key);
+  }
+}
+
+function refreshRetouchUi() {
+  if (state.mode !== 'retouch' || !editor?.base) return;
+  $('undoBtn').disabled = !editor.undoStack.length || retouch.running;
+  $('redoBtn').disabled = !editor.redoStack.length || retouch.running;
+  $('retouchSaveBtn').disabled = retouch.running;
+  const masked = editor.hasMask();
+  setGenerateLabels(masked ? 'generateLocal' : 'generate');
+  const text = $('retouchText').value.trim();
+  $('retouchHint').textContent = t(text ? 'retouchHintText' : masked ? 'retouchHintMask' : 'retouchHintNoMask');
+}
+
+async function loadBitmap(assetId) {
+  const blob = await store.blob(assetId);
+  return blob ? createImageBitmap(blob) : null;
+}
+
+// Source de restauration : l'image avant retouche, ou une autre version de la case.
+function renderSourceOptions() {
+  const panel = retouch.panelId && P.locatePanel(project(), retouch.panelId)?.panel;
+  const items = [['origin', t('sourceOrigin')]];
+  (panel?.versions || []).forEach((v, i) => items.push([`v:${v.id}`, `${t('sourceVersion', { n: i + 1 })} · ${t(`versionMode_${v.mode}`)}`]));
+  fillSelect($('source'), items, $('source').value);
+}
+
+async function applySourceSelection() {
+  const value = $('source').value;
+  const panel = P.locatePanel(project(), retouch.panelId)?.panel;
+  const version = value.startsWith('v:') && panel?.versions.find((v) => `v:${v.id}` === value);
+  editor.setSource(version ? await loadBitmap(version.assetId) : null);
+}
+
+// Charge la version actuelle de la case dans l'éditeur, en pleine résolution.
+async function loadRetouch(panel) {
+  const version = P.currentVersion(panel);
+  const bitmap = version && await loadBitmap(version.assetId);
+  if (!bitmap) return false;
+  editor.load(bitmap);
+  bitmap.close?.();
+  retouch.panelId = panel.id;
+  retouch.versionId = version.id;
+  retouch.saved = cloneCanvas(editor.base);
+  $('source').value = 'origin';
+  renderSourceOptions();
+  setEditTool(editor.tool);
+  refreshRetouchUi();
+  return true;
+}
+
+// Vrai si l'image de l'éditeur diffère du dernier enregistrement (le masque seul ne compte pas).
+function retouchDirty() {
+  const a = editor?.base;
+  const b = retouch.saved;
+  if (!a || !b) return false;
+  if (a.width !== b.width || a.height !== b.height) return true;
+  const pixels = (c) => new Uint32Array(c.getContext('2d').getImageData(0, 0, c.width, c.height).data.buffer);
+  const pa = pixels(a);
+  const pb = pixels(b);
+  for (let i = 0; i < pa.length; i += 1) if (pa[i] !== pb[i]) return true;
+  return false;
+}
+
+const presetSide = (preset) => {
+  const p = P.PRESETS[preset] || P.PRESETS.mp1;
+  return p.long || Math.round(Math.sqrt(p.area));
+};
+// Taille valide pour le Tiiny à un format donné, pour Editor.prepareLocal.
+const retouchSize = (ratio, side) => P.sizeForArea(P.generationRatio(ratio, 1), side * side);
+const canvasBlob = (canvas) => new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+
+// Enregistre l'image de l'éditeur comme nouvelle version de la case (rien n'est jamais remplacé).
+// `makeCurrent` : faux quand l'utilisateur vient de choisir une autre version, qui reste l'actuelle.
+async function addRetouchVersion(panelId, fields = {}, { makeCurrent = true } = {}) {
+  const panel = P.locatePanel(project(), panelId)?.panel;
+  if (!panel) return null;
+  const width = editor.width;
+  const height = editor.height;
+  const asset = await store.addAsset(project().id, await editor.toBlob(), { kind: 'render', width, height });
+  const parent = retouch.versionId;
+  const version = {
+    id: P.uid(),
+    assetId: asset.id,
+    width,
+    height,
+    createdAt: Date.now(),
+    mode: 'retouch',
+    description: panel.description || '',
+    prompt: '',
+    ...fields,
+    ...(parent ? { parent } : {}),
+  };
+  panel.versions.push(version);
+  if (makeCurrent) {
+    const before = panel.versions.find((v) => v.id === parent);
+    // Format changé (recadrage, rotation, extension) : l'ancien cadrage n'a plus de sens.
+    if (!before || Math.abs(before.width / before.height - width / height) > 0.005) panel.placement = { zoom: 1, x: 0, y: 0 };
+    panel.current = version.id;
+    retouch.versionId = version.id;
+  }
+  retouch.saved = cloneCanvas(editor.base);
+  await store.url(asset.id);
+  await touch({ now: true });
+  return version;
+}
+
+async function saveRetouch({ makeCurrent = true, quiet = false } = {}) {
+  if (!retouchDirty()) {
+    if (!quiet) setStatus(t('retouchNothing'));
+    return null;
+  }
+  const version = await addRetouchVersion(retouch.panelId, {}, { makeCurrent });
+  if (version) setStatus(t('retouchSaved'));
+  return version;
+}
+
+// Après un changement de case ou de version : enregistre les retouches en cours, puis charge la nouvelle image.
+function syncRetouch() {
+  if (state.mode !== 'retouch' || retouch.running || !editor) return;
+  const sel = selectedPanel();
+  if (sel && sel.panel.id === retouch.panelId && P.currentVersion(sel.panel)?.id === retouch.versionId) return;
+  retouchTask(async () => {
+    if (state.mode !== 'retouch') return;
+    const now = selectedPanel();
+    const version = now && P.currentVersion(now.panel);
+    if (now && now.panel.id === retouch.panelId && version?.id === retouch.versionId) return;
+    const saved = await saveRetouch({ quiet: true, makeCurrent: now?.panel.id !== retouch.panelId });
+    if (!version || !(await loadRetouch(now.panel))) {
+      // Sans image à retoucher, on revient à la page (sans attendre : cette tâche doit d'abord finir).
+      retouch.saved = null;
+      setMode(retouch.prevMode).then(() => setStatus(t(now ? 'retouchNoImage' : 'selectPanelFirst'), { error: true }));
+      return;
+    }
+    if (saved) {
+      renderPageList();
+      renderPanelEditor();
+    }
+  });
+}
+
+// Bascule l'affichage entre la vue de page et l'éditeur.
+function showRetouch(on) {
+  document.body.classList.toggle('retouching', on);
+  $('editTools').hidden = !on;
+  $('editOptions').hidden = !on;
+  $('retouchView').hidden = !on;
+  $('retouchSection').hidden = !on;
+  if (!on) setGenerateLabels('generate');
+}
+
+// Génération à travers le masque, comme dans TiinyPaint : la zone masquée est repeinte (méthode fill ou keep,
+// zone du masque ou image entière) ; sans masque, toute l'image est modifiée. Le résultat devient une version.
+async function retouchGenerate() {
+  const blocker = generateBlocker();
+  if (blocker) return flashNode(blocker);
+  const panel = editor?.base && P.locatePanel(project(), retouch.panelId)?.panel;
+  if (!panel) return setStatus(t('selectPanelFirst'), { error: true });
+  const text = $('retouchText').value.trim();
+  // Pour une correction de texte, la description de la scène entière n'aide pas : elle n'est pas reprise.
+  const instruction = $('retouchPrompt').value.trim() || (text ? '' : panel.description.trim());
+  if (!instruction && !text) return setStatus(t('needRetouchPrompt'), { error: true });
+  const preset = state.preset;
+  const side = presetSide(preset);
+  const keepContent = $('method').value === 'keep';
+  const local = editor.prepareLocal({ side, wholeImage: $('scope').value === 'full', keepContent, sizeFor: retouchSize });
+  let request;
+  let region;
+  if (local) {
+    request = { image: local.image, maskImage: local.maskImage || null, width: local.width, height: local.height, method: keepContent ? 'keep' : 'fill' };
+    region = { ...local.region, masked: true };
+  } else {
+    const [width, height] = retouchSize(editor.width / editor.height, side);
+    const canvas = makeCanvas(width, height);
+    canvas.getContext('2d').drawImage(editor.base, 0, 0, width, height);
+    request = { image: canvas.toDataURL('image/png'), width, height, method: 'whole' };
+    region = { x: 0, y: 0, w: editor.width, h: editor.height, masked: false };
+  }
+  const maskCanvas = local ? cloneCanvas(editor.mask) : null;
+  const mode = text ? 'textfix' : 'retouch';
+  const controller = beginTask();
+  retouch.running = true;
+  editor.disabled = true;
+  refreshRetouchUi();
+  const started = Date.now();
+  const label = P.panelLabel(project(), panel.id);
+  let lastStep = 0;
+  let total = 0;
+  const progress = {
+    title: `${t('panelShort', { n: `${label.page}·${label.panel}` })} · ${t(`versionMode_${mode}`)}`,
+    phase: 'prep',
+    points: [],
+    requested: [],
+    total: 0,
+    started,
+  };
+  const tick = () => {
+    const elapsed = t('elapsed', { t: formatDuration((Date.now() - started) / 1000) });
+    renderGenInfo(progress);
+    setStatus(lastStep ? `${$('genDetail').textContent} · ${elapsed}` : `${t('rendering', { n: `${label.page}·${label.panel}` })} ${elapsed}`);
+  };
+  const timer = setInterval(tick, 250);
+  tick();
+  renderChain('model');
+  try {
+    const result = await generator.retouch({
+      project: project(),
+      panelId: panel.id,
+      ...request,
+      instruction,
+      text,
+      preset,
+      options: renderOptions(preset),
+      signal: controller.signal,
+      onStage: (stage) => {
+        if (stage === 'embed' || stage === 'output') progress.phase = stage;
+        renderChain(stage === 'output' ? 'output' : 'model');
+      },
+      onStep: ({ step, total: n, requested }) => {
+        Object.assign(progress, { phase: 'model', total: n, requested });
+        progress.points.push({ step, t: Date.now() });
+        lastStep = step;
+        total = n;
+      },
+      onPreview: async ({ image }) => {
+        const bitmap = await createImageBitmap(ComicGenerator.helpers.dataUrlToBlob(image));
+        if (retouch.running) editor.setPreview(bitmap, region);
+      },
+    });
+    const bitmap = await createImageBitmap(ComicGenerator.helpers.dataUrlToBlob(result.image));
+    if (local) editor.commitLocal(bitmap, region);
+    else editor.commitWhole(bitmap);
+    const maskAsset = maskCanvas && await store.addAsset(project().id, await canvasBlob(maskCanvas), { kind: 'mask', width: maskCanvas.width, height: maskCanvas.height });
+    const b = result.body;
+    const version = await addRetouchVersion(panel.id, {
+      mode,
+      preset,
+      prompt: b.prompt,
+      instruction,
+      ...(text ? { lettering: text } : {}),
+      method: request.method,
+      model: b.model,
+      seed: b.seed,
+      steps: b.steps,
+      guidance: b.guidance_scale,
+      refs: result.refs,
+      ...(maskAsset ? { maskAssetId: maskAsset.id } : {}),
+    });
+    if (state.randomSeed) $('seed').value = b.seed;
+    setStatus(t('done', { t: formatDuration((Date.now() - started) / 1000), w: version.width, h: version.height, s: b.seed }));
+  } catch (err) {
+    editor.clearPreview();
+    if (err.name === 'AbortError' && lastStep) setStatus(t('stoppedAt', { s: lastStep, n: total }));
+    else reportError(err, 'renderStopped');
+  } finally {
+    clearInterval(timer);
+    renderGenInfo(null);
+    renderChain();
+    retouch.running = false;
+    editor.disabled = false;
+    endTask();
+    renderPageList();
+    renderPanelEditor();
+    refreshRetouchUi();
+  }
+  return null;
+}
+
+function bindEditor() {
+  editor = new Editor($('editCanvas'), { onChange: () => refreshRetouchUi() });
+  editor.onMessage = (key) => setStatus(t(key), { error: true });
+  $('editToolButtons').addEventListener('click', (event) => {
+    const button = event.target.closest('button');
+    if (button) setEditTool(button.dataset.tool);
+  });
+  const slider = (id, outputId, apply) => {
+    const update = () => {
+      $(outputId).textContent = $(id).value;
+      apply(+$(id).value);
+    };
+    $(id).addEventListener('input', update);
+    update();
+  };
+  slider('brushSize', 'brushValue', (v) => { editor.brush = v; });
+  slider('feather', 'featherValue', (v) => { editor.feather = v; });
+  $('showMask').addEventListener('change', () => {
+    editor.showMask = $('showMask').checked;
+    editor.redraw();
+  });
+  $('undoBtn').addEventListener('click', () => editor.undo());
+  $('redoBtn').addEventListener('click', () => editor.redo());
+  $('zoomResetBtn').addEventListener('click', () => {
+    editor.resetZoom();
+    editor.redraw();
+  });
+  $('invertBtn').addEventListener('click', () => editor.invertMask());
+  $('clearMaskBtn').addEventListener('click', () => editor.clearMask());
+  $('source').addEventListener('change', applySourceSelection);
+  $('copySourceBtn').addEventListener('click', async () => {
+    await applySourceSelection();
+    if (!editor.copySourceIntoMask()) setStatus(t('needMaskOrPrompt'), { error: true });
+  });
+  $('cropRatio').addEventListener('change', () => {
+    const m = /^(\d+):(\d+)$/.exec($('cropRatio').value);
+    editor.cropRatio = m ? +m[1] / +m[2] : null;
+    editor.crop = null;
+    editor.redraw();
+  });
+  $('applyCropBtn').addEventListener('click', () => {
+    if (editor.applyCrop()) setEditTool('crop');
+    else setStatus(t('cropTooSmall'), { error: true });
+  });
+  for (const button of $('editOptions').querySelectorAll('[data-extend]')) {
+    button.addEventListener('click', () => {
+      editor.extend(button.dataset.extend);
+      $('method').value = 'fill';
+      syncPicker($('method'));
+      setEditTool('mask');
+    });
+  }
+  $('rotateBtn').addEventListener('click', () => { editor.rotate(); setEditTool('crop'); });
+  $('flipBtn').addEventListener('click', () => { editor.flip(); setEditTool('crop'); });
+  $('retouchSaveBtn').addEventListener('click', () => retouchTask(() => saveRetouch()).then(() => {
+    renderPageList();
+    renderPanelEditor();
+  }));
+  $('retouchGenBtn').addEventListener('click', retouchGenerate);
+  $('retouchStopBtn').addEventListener('click', () => state.abort?.abort());
+  $('closeEditorBtn').addEventListener('click', () => setMode(retouch.prevMode));
+  $('retouchBtn').addEventListener('click', () => setMode('retouch'));
+  $('retouchText').addEventListener('input', refreshRetouchUi);
+  // Raccourcis de l'éditeur : seulement en mode Retouche (le croquis a les siens, dans pageview.js).
+  document.addEventListener('keydown', (event) => {
+    if (state.mode !== 'retouch' || !editor.base || retouch.running) return;
+    if (!(event.ctrlKey || event.metaKey) || /INPUT|TEXTAREA|SELECT/.test(event.target.tagName)) return;
+    const key = event.key.toLowerCase();
+    if (key === 'z') {
+      event.preventDefault();
+      if (event.shiftKey) editor.redo();
+      else editor.undo();
+    } else if (key === 'y') {
+      event.preventDefault();
+      editor.redo();
+    }
+  });
 }
 
 /* ---------- Progression d'un rendu ---------- */
@@ -1562,6 +2020,8 @@ function setBusy(busy) {
   state.busy = busy;
   $('generateBtn').hidden = busy;
   $('stopBtn').hidden = !busy;
+  $('retouchGenBtn').hidden = busy;
+  $('retouchStopBtn').hidden = !busy;
   for (const id of ['imageModel', 'peModel', 'llmModel', 'seedBtn', 'connBtn', 'format']) {
     $(id).disabled = busy;
     syncPicker($(id));
@@ -1719,7 +2179,13 @@ function bindCollapsibles() {
       saveSettings();
     });
   }
-  new ResizeObserver(() => fitPageBar()).observe(document.querySelector('.page-bar-wrap'));
+  const wrap = document.querySelector('.page-bar-wrap');
+  new ResizeObserver(() => {
+    fitPageBar();
+    fitEditOptions();
+    // La zone centrale commence sous la barre de page (et la ligne de réglages de la retouche).
+    document.documentElement.style.setProperty('--bar-h', `${Math.ceil(wrap.getBoundingClientRect().height)}px`);
+  }).observe(wrap);
   const observer = new ResizeObserver(measureBars);
   observer.observe(document.querySelector('.topbar'));
   observer.observe($('chain'));
@@ -1742,6 +2208,10 @@ function setLanguage(lang) {
   renderConnButton();
   renderCollapsibles();
   if (state.project) renderAll();
+  if (state.mode === 'retouch') {
+    renderSourceOptions();
+    setEditTool(editor.tool);
+  }
   if (idle || !$('status').textContent) setStatus(t('ready'));
   saveSettings();
 }
@@ -1761,8 +2231,11 @@ function bindEvents() {
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      const open = !!openPickerSelect || ['projectMenu', 'exportMenu', 'templateMenu', 'refMenu'].some((id) => !$(id).hidden);
       closeMenus();
       closePicker(true);
+      // Échap quitte la retouche, sauf s'il fermait un menu ou si l'on écrit dans un champ.
+      if (!open && state.mode === 'retouch' && !/INPUT|TEXTAREA/.test(e.target.tagName)) setMode(retouch.prevMode);
     }
   });
   $('settingsCancel').addEventListener('click', () => $('settings').close());
@@ -1886,7 +2359,7 @@ function bindEvents() {
   }
   for (const b of document.querySelectorAll('[data-upscale]')) b.addEventListener('click', () => renderPanel('upscale', b.dataset.upscale));
   $('extendBtn').addEventListener('click', () => renderPanel('extend'));
-  $('generateBtn').addEventListener('click', () => renderPanel('generate'));
+  $('generateBtn').addEventListener('click', () => (state.mode === 'retouch' ? retouchGenerate() : renderPanel('generate')));
   $('stopBtn').addEventListener('click', () => state.abort?.abort());
   $('seedBtn').addEventListener('click', () => {
     state.randomSeed = !state.randomSeed;
@@ -1931,7 +2404,9 @@ function bindEvents() {
     importImages([...e.dataTransfer.files]);
   });
 
-  window.addEventListener('beforeunload', () => {
+  window.addEventListener('beforeunload', (e) => {
+    // Retouche non enregistrée : le navigateur demande confirmation.
+    if (state.mode === 'retouch' && retouchDirty()) e.preventDefault();
     saveSettings();
     if (state.project) store.saveProject(state.project);
   });
@@ -1945,6 +2420,7 @@ async function start() {
   applyI18n(state.settings.language || detectLanguage());
   $('language').value = currentLang;
   bindEvents();
+  bindEditor();
   bindCollapsibles();
   renderCollapsibles();
   enhancePickers();

@@ -12,7 +12,7 @@ A static web page with no backend and no build step, like TiinyPaint: plain `<sc
 | `web/i18n.js` | Translations, `t(key, params)` | `I18N`, `t`, `applyI18n`, `currentLang` |
 | `web/project.js` | Pure data model: formats, layout tree, geometry, reading order, render sizes. Tested by `tests/project.test.js` | `TC_PROJECT` |
 | `web/store.js` | IndexedDB persistence of projects and images | `ComicStore` |
-| `web/editor.js` | TiinyPaint's canvas editor (mask, lasso...), reused for text correction | `Editor`, `makeCanvas` |
+| `web/editor.js` | TiinyPaint's canvas editor (mask, lasso, restore, stamp, crop, undo...), unchanged copy, used by the Retouch mode | `Editor`, `makeCanvas`, `cloneCanvas` |
 | `web/generate.js` | Context building, LLM and PE chain, render requests, presets, upscale, extend | `ComicGenerator` |
 | `web/export.js` | Page rendering to canvas, PNG, ZIP and PDF export | `ComicExport` |
 | `web/pageview.js` | Interactive page view: panels, dividers, selection, image framing | `PageView` |
@@ -44,11 +44,12 @@ Panel  {
 }
 Version {
   id, assetId, width, height, createdAt,
-  mode: 'generate' | 'upscale' | 'extend' | 'textfix' | 'import',
+  mode: 'generate' | 'upscale' | 'extend' | 'retouch' | 'textfix' | 'import',
   preset: 'draft' | 'mp1' | 'mp2' | 'mp4',
   description, prompt,        // what the user wrote, and the exact prompt sent
   model, seed, steps, guidance, refs: [assetId], contextPanels: [panelId],
-  sketchAssetId?, maskAssetId?, parent?: versionId
+  sketchAssetId?, maskAssetId?, parent?: versionId,
+  instruction?, lettering?, method?   // retouch / textfix: what the user asked, the exact text lettered, 'fill' | 'keep' | 'whole'
 }
 ```
 
@@ -72,4 +73,12 @@ The prompt states the format, the project style, a short summary of the previous
 
 Optional chain before the render: **LLM** (any chat model) writes a scene prompt from the story context (synopsis, previous descriptions, their images when the model reads images), then **PE** (PE-I2I with images, PE-T2I without) polishes it for Qwen-Image. Either can be off. The result is shown and editable before rendering.
 
-Modes: `generate` (preset), `upscale` (current image as `<image1>`, same composition, larger size), `extend` (the framed image on a canvas at the panel ratio, the uncovered part filled with a blurred mirror of the image's edges and repainted, then the original pixels recomposited with a wide feather; a magenta fill does not work here: the model ignores it and enlarges the picture), `textfix` (later phase: a masked bubble repainted with typed text).
+Modes: `generate` (preset), `upscale` (current image as `<image1>`, same composition, larger size), `extend` (the framed image on a canvas at the panel ratio, the uncovered part filled with a blurred mirror of the image's edges and repainted, then the original pixels recomposited with a wide feather; a magenta fill does not work here: the model ignores it and enlarges the picture), `retouch` and `textfix` (see below).
+
+## Retouch mode
+
+A fourth page-bar mode (`Retouch`, also the "Retouch the image" button of the panel editor) replaces the page view with TiinyPaint's `Editor` on the selected panel's current version at full resolution (`#retouchView`, the Editor's own wheel zoom and pan). Its tools are in `#editTools` in the page bar, their settings in `#editOptions`, a compact row fixed under the bar (labels hidden first when it overflows, `fitEditOptions`). Leaving the mode (another mode, the close button, Escape) or switching panel or version saves pending changes first; Ctrl+Z / Ctrl+Y act on the editor only in this mode.
+
+- **Generation through the mask** (the panel editor's Generate button, or the one in the bar), as in TiinyPaint: `Editor.prepareLocal` crops around the mask (scope `crop`) or takes the whole image (`full`), tinted magenta (method `fill`) or with a separate white mask image sent last (`keep`); without a mask the whole image is edited. `ComicGenerator.retouch` sends `[image, panel refs (3 at most), mask?]` with `buildRetouchPrompt` and the usual render options, the result is blended back through the feathered mask (`commitLocal` / `commitWhole`).
+- **Text fix**: when "Text to letter" is filled, the prompt asks to letter exactly that text in the masked area as clean comic lettering; the version mode is `textfix`. Otherwise the "Retouch instruction" is used (empty: the scene description), mode `retouch`.
+- **Saving**: every generation and every manual edit (restore, stamp, crop, rotate, extend, via "Save the retouch" or on leaving) becomes a new version with `parent` = the edited version; the mask of a generation is kept as a `mask` asset (`maskAssetId`). When the aspect ratio changes, the panel placement is reset to `{ zoom: 1, x: 0, y: 0 }`. Nothing is overwritten.

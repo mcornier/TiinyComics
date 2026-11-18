@@ -270,7 +270,8 @@ body.left-collapsed .side-left, body.right-collapsed .side-right { bottom: auto;
 /* Barre de page : sa propre largeur décide du passage en icônes ; elle ne passe jamais sur deux lignes. */
 .page-bar-wrap { position: fixed; top: var(--top-h); left: calc(var(--left-w) + 2 * var(--gap)); right: calc(var(--right-w) + 2 * var(--gap)); z-index: 10; min-width: 0; }
 /* La barre est fixe : la zone de page commence sous elle. */
-@media (min-width: 1101px) { .stage { padding-top: calc(var(--top-h) + 44px + var(--gap)); } }
+/* --bar-h : hauteur mesurée de la barre (et, en mode Retouche, de la ligne de réglages dessous). */
+@media (min-width: 1101px) { .stage { padding-top: calc(var(--top-h) + var(--bar-h, 44px) + var(--gap)); } }
 .page-bar-wrap .page-bar { position: static; width: 100%; }
 .page-bar > *, .page-bar .tools, .bar-group { flex: none; }
 .page-bar .spacer { flex: 1 1 0; min-width: 0; }
@@ -311,3 +312,29 @@ body.left-collapsed .side-left, body.right-collapsed .side-right { bottom: auto;
 .mode-sketch .cell.sketching, .mode-frame .cell.selected, .divider, .strip-handle { touch-action: none; }
 /* Zoom sur une case : marge autour de la page pour pouvoir centrer n'importe quelle case. */
 .viewport.focused { padding: 45vh 45vw; align-self: flex-start; align-items: flex-start; width: max-content; min-width: 100%; }
+
+/* Retouche : l'éditeur d'image remplace la vue de page ; les réglages de l'outil tiennent sur une ligne sous la barre. */
+.page-bar-wrap { display: flex; flex-direction: column; gap: 6px; }
+.edit-options { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px 12px; width: 100%; min-width: 0; min-height: 40px; padding: 4px 10px; white-space: nowrap; overflow: hidden; }
+.edit-options > * { flex: none; }
+.edit-options .opt input[type="range"] { width: 90px; }
+.edit-options .picker { min-height: 30px; max-width: 170px; }
+.edit-options .opt.check .icon-slot { display: none; }
+.edit-options.opt-icons .opt-label, .edit-options.opt-icons .btn[data-icon] > span { display: none; }
+.edit-options.opt-icons .opt.check .icon-slot { display: inline-flex; }
+.edit-options.opt-icons .picker { max-width: 130px; }
+.edit-options.opt-tight { gap: 6px 8px; }
+.edit-options.opt-tight .opt input[type="range"] { width: 64px; }
+.edit-options.opt-tight .picker { max-width: 104px; }
+.page-bar.bar-icons #retouchGenBtn span, .page-bar.bar-icons #retouchStopBtn span { display: none; }
+body.retouching .viewport { display: none; }
+body.retouching .stage { height: 100vh; overflow: clip; }
+body.retouching .zoom-box, body.retouching #stripHeightBox { display: none; }
+body.retouching .hide-retouch { display: none; }
+.retouch-view { flex: 1 1 auto; position: relative; }
+.retouch-view .edit-canvas { transform-origin: center; }
+@media (max-width: 1100px) {
+  body.retouching .stage { height: auto; overflow: visible; }
+  .retouch-view { flex: none; height: 72vh; }
+  .edit-options { overflow-x: auto; }
+}

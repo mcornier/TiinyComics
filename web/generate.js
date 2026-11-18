@@ -14,6 +14,7 @@
   const SOURCE_SIDE = 2048;
   const UPSCALE_MAX_REFS = 2; // chaque image coûte environ 15 s d'encodage : peu de références pour un agrandissement
   const EXTEND_MAX_REFS = 3;
+  const RETOUCH_MAX_REFS = 3; // retouche locale : quelques références suffisent pour garder les personnages
   const RETRY_DELAY_MS = 10000;
   // Sans aperçu, rien ne signale la fin de l'encodage (mesures TiinyPaint, modèle chargé).
   const DEFAULT_SAMPLING = { temperature: 1, top_p: 0.95, top_k: 20 };
@@ -101,6 +102,31 @@ Return one strictly valid JSON object and nothing else: {"rewritten_prompt": "..
     const look = ` Match the ${formatStyle(format)} style of <image1>${style.trim() ? ` (${style.trim().replace(/[.]$/, '')})` : ''}.`;
     const ref = refs.length ? ` References: ${refs.map((r) => `<image${r.imageN}> is ${r.name ? `"${r.name}"` : 'a reference image'}`).join(', ')}.` : '';
     return `<image1> is a comic panel whose outer areas are blurry placeholders around the sharp original picture. Repaint the blurry areas with sharp, detailed content that extends the scene naturally beyond the original frame, keeping the same composition, scale and perspective.${scene}${look}${ref} Keep the sharp picture exactly where it is, at the same size: do not zoom, move or redraw it. No blur may remain.`;
+  }
+
+  // Retouche (mode Retouche) : consigne autour de la demande, reprise de TiinyPaint (wrapLocalPrompt).
+  // `method` : 'fill' (zone magenta à repeindre), 'keep' (masque blanc envoyé en <image maskN>), 'whole' (sans masque).
+  // `text` : correction de texte, le lettrage exact à écrire dans la zone. `refs` : [{ imageN, name }].
+  function buildRetouchPrompt({ instruction = '', text = '', method = 'fill', maskN = null, refs = [] }) {
+    const lettering = String(text || '').trim();
+    const parts = [];
+    if (String(instruction || '').trim()) parts.push(sentence(instruction));
+    if (lettering) {
+      parts.push(`Letter exactly this text as clean, legible comic lettering inside a speech balloon or caption box that fits the area: "${lettering}". Copy it letter for letter, in its original language, with correct spelling, and add no other words.`);
+    }
+    const edit = parts.join(' ');
+    let prompt;
+    if (method === 'keep') {
+      prompt = `In <image1>, apply this edit only in the area shown white in the mask <image${maskN}>: ${edit} Everything outside the white area must stay exactly as in <image1>.`;
+    } else if (method === 'whole') {
+      prompt = `Edit <image1>: ${edit} Keep everything else exactly as in <image1>: same composition, characters, colours and line art.`;
+    } else {
+      prompt = `In <image1>, repaint the solid magenta area: ${edit} The result must blend naturally with its surroundings, and no magenta may remain. Everything outside the magenta area stays exactly unchanged.`;
+    }
+    if (refs.length) {
+      prompt += ` Reference images: ${refs.map((r) => `<image${r.imageN}> is ${r.name ? `"${r.name}"` : 'a reference image'}`).join(', ')}; use them only to draw characters and setting as they look there, without copying them.`;
+    }
+    return prompt;
   }
 
   // Ordre des images : [image source] ou croquis, références, cases précédentes (les plus anciennes tombent en premier).
@@ -363,21 +389,7 @@ Return one strictly valid JSON object and nothing else: {"rewritten_prompt": "..
 
       const [width, height] = size;
       const steps = o.steps || P.PRESETS[preset]?.steps || 40;
-      const body = {
-        model: o.model,
-        prompt,
-        // La route en flux ignore `size` : width et height obligatoires.
-        width,
-        height,
-        steps,
-        guidance_scale: o.guidance ?? 1,
-        seed: o.seed ?? randomSeed(),
-        stream_return_steps: streamSteps(steps, o.previews ?? true),
-        app_id: 'tiinycomics',
-      };
-      if (images.length) body.images = images;
-      if (o.negative && o.negative.trim()) body.negative_prompt = o.negative.trim();
-      if (o.scheduler) body.scheduler = { type: o.scheduler };
+      const body = this._body(prompt, width, height, images, o, steps);
       return { body, sources, size: { width, height }, plan, contextPanels };
     }
 
@@ -510,9 +522,9 @@ Return one strictly valid JSON object and nothing else: {"rewritten_prompt": "..
 
     /* ---------- Rendu ---------- */
 
-    async render({ project, panelId, rect, mode = 'generate', preset = 'mp1', options = {}, signal, onStage, onStep, onPreview }) {
+    // Envoie la requête en flux (après chargement du modèle) et relaie étapes et aperçus ; partagé par le rendu et la retouche.
+    async _stream(body, { previews = true, signal, onStage, onStep, onPreview }) {
       const client = this._client();
-      const { body, sources, plan, contextPanels } = await this.buildRenderRequest({ project, panelId, rect, mode, preset, options });
       const shown = new Set(previewSteps(body.steps));
       await this.ensureLoaded(body.model, signal);
       let lastStep = 0;
@@ -523,7 +535,7 @@ Return one strictly valid JSON object and nothing else: {"rewritten_prompt": "..
           if (!lastStep) onStage?.('model');
           lastStep = Math.max(lastStep, event.step || 0);
           onStep?.({ step: event.step, total: body.steps, requested: body.stream_return_steps });
-          if (shown.has(event.step) && (options.previews ?? true)) onPreview?.({ image: event.image, step: event.step, total: body.steps });
+          if (shown.has(event.step) && previews) onPreview?.({ image: event.image, step: event.step, total: body.steps });
         },
       });
       let result;
@@ -536,6 +548,62 @@ Return one strictly valid JSON object and nothing else: {"rewritten_prompt": "..
         result = await attempt();
       }
       onStage?.('output');
+      return result;
+    }
+
+    // Corps commun d'une requête de rendu, avec les réglages de `options` (ceux de renderOptions dans app.js).
+    _body(prompt, width, height, images, o, steps) {
+      const body = {
+        model: o.model,
+        prompt,
+        // La route en flux ignore `size` : width et height obligatoires.
+        width,
+        height,
+        steps,
+        guidance_scale: o.guidance ?? 1,
+        seed: o.seed ?? randomSeed(),
+        stream_return_steps: streamSteps(steps, o.previews ?? true),
+        app_id: 'tiinycomics',
+      };
+      if (images.length) body.images = images;
+      if (o.negative && o.negative.trim()) body.negative_prompt = o.negative.trim();
+      if (o.scheduler) body.scheduler = { type: o.scheduler };
+      return body;
+    }
+
+    /* ---------- Retouche ---------- */
+
+    // Requête de retouche. `image` (et `maskImage` en méthode 'keep') viennent de Editor.prepareLocal, ou de
+    // l'image entière sans masque ; les références de la case passent entre les deux, dans la limite de l'API.
+    async buildRetouchRequest({ project, panelId, image, maskImage = null, width, height, method = 'fill', instruction = '', text = '', preset = 'mp1', options = {} }) {
+      const loc = P.locatePanel(project, panelId);
+      if (!loc) throw codedError('noPanel', 'Panel not found');
+      const names = new Map(project.library.map((l) => [l.assetId, l.name]));
+      const room = MAX_IMAGES - 1 - (maskImage ? 1 : 0);
+      const refs = [];
+      for (const assetId of loc.panel.refs.slice(0, Math.min(room, RETOUCH_MAX_REFS))) {
+        const url = await this.store.dataUrl(assetId, { maxSide: CONTEXT_SIDE });
+        if (url) refs.push({ assetId, name: names.get(assetId) || '', url, imageN: refs.length + 2 });
+      }
+      const images = [image, ...refs.map((r) => r.url)];
+      if (maskImage) images.push(maskImage);
+      const prompt = buildRetouchPrompt({ instruction, text, method, maskN: maskImage ? images.length : null, refs });
+      const steps = options.steps || P.PRESETS[preset]?.steps || 40;
+      return { body: this._body(prompt, width, height, images, options, steps), refs: refs.map((r) => r.assetId) };
+    }
+
+    // Lance la retouche ; renvoie l'image brute (data URL) : l'application la réintègre à travers le masque.
+    async retouch({ signal, onStage, onStep, onPreview, ...request }) {
+      this._client();
+      const { body, refs } = await this.buildRetouchRequest(request);
+      const result = await this._stream(body, { previews: request.options?.previews ?? true, signal, onStage, onStep, onPreview });
+      return { body, refs, image: result.image, elapsedMs: result.metadata?.elapsed_ms ?? null };
+    }
+
+    async render({ project, panelId, rect, mode = 'generate', preset = 'mp1', options = {}, signal, onStage, onStep, onPreview }) {
+      this._client();
+      const { body, sources, plan, contextPanels } = await this.buildRenderRequest({ project, panelId, rect, mode, preset, options });
+      const result = await this._stream(body, { previews: options.previews ?? true, signal, onStage, onStep, onPreview });
       const blob = plan ? await this._commitExtend(plan, result.image) : dataUrlToBlob(result.image);
       const asset = await this.store.addAsset(project.id, blob, { kind: 'render', width: body.width, height: body.height });
       const panel = P.locatePanel(project, panelId).panel;
@@ -591,7 +659,7 @@ Return one strictly valid JSON object and nothing else: {"rewritten_prompt": "..
 
   ComicGenerator.buildPanelPrompt = buildPanelPrompt;
   const helpers = {
-    buildPanelPrompt, buildUpscalePrompt, buildExtendPrompt, buildLlmRequest, planImages, previewSteps, streamSteps,
+    buildPanelPrompt, buildUpscalePrompt, buildExtendPrompt, buildRetouchPrompt, buildLlmRequest, planImages, previewSteps, streamSteps,
     parseEnhanced, extendGeometry, featherWeight, dataUrlToBlob, COMIC_SYSTEM_PROMPT, FORMAT_STYLES, PE_I2I, PE_T2I, MAX_IMAGES,
   };
   Object.assign(ComicGenerator, { helpers });

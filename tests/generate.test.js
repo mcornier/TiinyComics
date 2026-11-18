@@ -248,6 +248,29 @@ target.refs = ['refA', 'refB'];
   assert(sk.includes('Scene: Léa entre.') && !sk.includes('Un phare.'));
   assert(sk.includes('<image2> is "Léa"') && sk.includes('Stick figures: a character (Léa)'));
   assert(!sk.includes('speech bubble at the top'));
+
+  // Retouche : consignes de TiinyPaint autour de la demande, et correction de texte.
+  const { buildRetouchPrompt } = G;
+  const fill = buildRetouchPrompt({ instruction: 'a red scarf', method: 'fill' });
+  assert.strictEqual(fill, 'In <image1>, repaint the solid magenta area: a red scarf. The result must blend naturally with its surroundings, and no magenta may remain. Everything outside the magenta area stays exactly unchanged.');
+  const keep = buildRetouchPrompt({ instruction: 'make it night', method: 'keep', maskN: 3, refs: [{ imageN: 2, name: 'Alice' }] });
+  assert(keep.startsWith('In <image1>, apply this edit only in the area shown white in the mask <image3>: make it night.'));
+  assert(keep.includes('<image2> is "Alice"'));
+  const fix = buildRetouchPrompt({ text: 'On y va !', method: 'fill' });
+  assert(fix.includes('Letter exactly this text as clean, legible comic lettering') && fix.includes('"On y va !"'));
+  assert(buildRetouchPrompt({ instruction: 'brighter', method: 'whole' }).startsWith('Edit <image1>: brighter.'));
+
+  // Retouche : image, références de la case, puis masque en dernier ; mêmes réglages que le rendu.
+  const rpanel = order[7].panel;
+  rpanel.refs = ['refA'];
+  const rt = await gen.buildRetouchRequest({ project, panelId: rpanel.id, image: 'IMG', maskImage: 'MASK', width: 512, height: 512, method: 'keep', instruction: 'x', options: { model: 'm', steps: 7, seed: 3 } });
+  assert.deepStrictEqual(rt.body.images, ['IMG', 'data:refA@1024', 'MASK']);
+  assert.strictEqual(rt.body.steps, 7);
+  assert.strictEqual(rt.body.seed, 3);
+  assert(rt.body.prompt.includes('mask <image3>'));
+  const rdone = await gen.retouch({ project, panelId: rpanel.id, image: 'IMG', width: 512, height: 512, method: 'fill', text: 'Hi', options: { model: 'm', steps: 7 } });
+  assert.strictEqual(rdone.image, PNG);
+  assert.deepStrictEqual(rdone.refs, ['refA']);
   console.log('generate tests OK');
 })().catch((err) => {
   console.error(err);
