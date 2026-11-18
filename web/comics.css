@@ -114,10 +114,7 @@
 .page-thumb.current { color: var(--text); font-weight: 600; }
 .mini-cell { position: absolute; background: #d9d8d2; overflow: hidden; }
 .mini-cell img { position: absolute; max-width: none; }
-.story summary { display: flex; cursor: pointer; list-style: none; }
-.story[open] summary { margin-bottom: 10px; }
-.story .stack { margin-bottom: 10px; }
-.story textarea { resize: vertical; }
+#storyPanel textarea { resize: vertical; }
 .thumb-name { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; padding: 3px 6px; border: 0; background: rgba(0, 0, 0, .66); color: var(--text); font: 11px system-ui, sans-serif; outline: none; }
 .thumb-name:focus { background: rgba(0, 0, 0, .85); }
 .thumb-name::placeholder { color: var(--muted); }
@@ -153,52 +150,56 @@
 .node.off { border-style: dashed; }
 .node.off .node-row > .icon-slot { opacity: .5; }
 
-/* Mise en page : la barre du haut, la chaîne et les panneaux sont fixes ; la zone centrale défile avec le document,
-   et c'est la barre de défilement de la fenêtre, à droite, qui sert. */
+/* Mise en page : la barre du haut, la chaîne et les colonnes latérales sont fixes ; la zone centrale défile
+   avec le document, et c'est la barre de défilement de la fenêtre, à droite, qui sert. */
 :root { --gap: 10px; --top-h: 84px; --bottom-h: 80px; --left-w: 270px; --right-w: 340px; }
 html, body { height: auto; min-height: 100%; }
-body { display: block; padding: 0; overflow-x: hidden; overflow-y: auto; }
+body { display: block; padding: 0; overflow: auto; }
 .topbar { position: fixed; top: var(--gap); left: var(--gap); right: var(--gap); z-index: 30; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
 .topbar-side, .topbar-center { display: flex; align-items: center; gap: 8px 14px; min-width: 0; }
 .topbar-center { gap: 8px; }
 .topbar-side.end { justify-content: flex-end; }
 .chain { position: fixed; left: var(--gap); right: var(--gap); bottom: var(--gap); }
-.side { position: fixed; top: var(--top-h); bottom: var(--bottom-h); z-index: 20; min-height: 0; }
-.side-left { left: var(--gap); width: 270px; }
-.side-right { right: var(--gap); width: var(--right-w); display: flex; flex-direction: column; gap: var(--gap); }
+.side { position: fixed; top: var(--top-h); bottom: var(--bottom-h); z-index: 20; min-height: 0; display: flex; flex-direction: column; gap: var(--gap); }
+.side-left { left: var(--gap); width: var(--left-w); }
+.side-right { right: var(--gap); width: var(--right-w); }
 .stage {
   min-height: 100vh;
   padding: var(--top-h) calc(var(--right-w) + 2 * var(--gap)) var(--bottom-h) calc(var(--left-w) + 2 * var(--gap));
   gap: var(--gap);
   container-type: inline-size;
 }
-/* Page à plat : elle tient dans la fenêtre, rien ne défile. Webtoon : les bandes s'empilent et la fenêtre défile. */
+/* Page ajustée : elle tient dans la fenêtre, rien ne défile. Zoomée ou webtoon : la fenêtre défile. */
 .stage:has(.viewport.fit) { height: 100vh; overflow: clip; }
-.viewport.webtoon { flex: none; overflow: visible; padding-bottom: 40px; }
+.viewport.webtoon, .viewport.zoomed { flex: none; overflow: visible; align-items: safe center; padding-bottom: 40px; }
 .viewport.webtoon .page { scroll-margin-top: calc(var(--top-h) + 64px); }
 .status { position: sticky; bottom: var(--bottom-h); flex: none; }
+.stage:not(:has(.viewport.fit)) .status { z-index: 5; padding: 2px 12px; border-radius: 8px; background: rgba(12, 14, 18, .72); }
+.zoom-label { min-width: 58px; justify-content: center; font-variant-numeric: tabular-nums; }
 
-/* Blocs repliables */
-.block-head h2 { display: flex; align-items: center; gap: 7px; }
+/* Blocs repliables. Repliés, leurs en-têtes se rangent côte à côte en haut de la colonne. */
+.block-head h2 { display: flex; align-items: center; gap: 7px; min-width: 0; margin: 0; font-size: 14px; line-height: 1.2; white-space: nowrap; overflow: hidden; }
+.block-head h2 > span[data-i18n], #panelTitle { overflow: hidden; text-overflow: ellipsis; }
+.block-head .section-actions { flex: none; }
 .block-body { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
 .block.collapsed .block-body { display: none; }
-.side-right > .block { min-height: 0; }
-#pagesPanel { flex: 0 1 auto; max-height: 44%; }
-#panelEditor { flex: 1 1 0; }
-#pagesPanel.collapsed, #panelEditor.collapsed { flex: none; max-height: none; }
-.side-right:has(#panelEditor.collapsed) #pagesPanel:not(.collapsed) { flex: 0 1 auto; max-height: 100%; }
-/* Bibliothèque réduite : elle glisse vers le bas et devient un bouton au début de la chaîne. */
-.side-left { transform-origin: 0 100%; transition: transform .28s ease, opacity .22s ease; }
-body.library-collapsed .side-left { transform: translateY(40px) scale(.12); opacity: 0; pointer-events: none; }
-.stage { transition: padding .28s ease; }
-body.library-collapsed { --left-w: calc(-1 * var(--gap)); }
-.chain .library-dock { position: relative; flex: none; width: 0; min-width: 0; margin: 0 calc(-1 * var(--gap)) 0 0; padding: 0; border-width: 0; opacity: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--text); cursor: pointer; transition: width .28s ease, opacity .22s ease .06s, margin .28s ease; }
-body.library-collapsed .chain .library-dock { width: 64px; margin-right: 0; border-width: 1px; opacity: 1; }
-.library-dock:hover { background: var(--hover); }
-.library-dock .icon-slot svg { width: 20px; height: 20px; }
-.dock-count { position: absolute; top: 7px; right: 8px; min-width: 16px; padding: 0 4px; border-radius: 8px; background: var(--active); color: #101317; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
-.dock-count:empty { display: none; }
+.side-inline { flex: none; display: flex; gap: var(--gap); min-width: 0; }
+.side-inline:empty { display: none; }
+.side-inline > .block { flex: 1 1 auto; min-width: 0; }
+.side > .block { min-height: 0; }
+.side > #libraryPanel, .side > #panelEditor { flex: 1 1 0; }
+.side > #pagesPanel { flex: 0 1 auto; max-height: 44%; }
+.side > #storyPanel { flex: 0 1 auto; max-height: 50%; }
+.side:not(:has(> #libraryPanel)) > #storyPanel, .side:not(:has(> #panelEditor)) > #pagesPanel { flex: 1 1 auto; max-height: none; }
 .section-actions .muted { font-size: 12px; }
+
+/* Grand écran : en-têtes à la hauteur de la barre de page, filet en dessous ; seul le contenu défile. */
+@media (min-width: 1101px) {
+  .side .block { overflow: hidden; padding: 0; gap: 0; }
+  .side .block > .block-head { flex: none; min-height: 42px; margin: 0; padding: 5px 7px 5px 14px; border-bottom: 1px solid var(--line); }
+  .side .block.collapsed > .block-head { border-bottom-color: transparent; }
+  .side .block > .block-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; margin: 0; padding: 14px 4px 14px 14px; scrollbar-gutter: stable; }
+}
 
 /* Barre de page sur une ligne : les libellés cèdent la place aux icônes quand la zone se resserre. */
 @container (max-width: 1060px) {
@@ -239,13 +240,12 @@ body.library-collapsed .chain .library-dock { width: 64px; margin-right: 0; bord
   .side-left { order: 3; }
   .chain { order: 4; flex-wrap: wrap; }
   .chain .node { flex: 1 1 260px; }
-  #pagesPanel, #panelEditor { max-height: none; flex: none; }
+  #pagesPanel, #panelEditor, #libraryPanel, #storyPanel { max-height: none; flex: none; }
   .panel { overflow: visible; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .cell.rendering::after { animation: none; }
-  .side-left, .stage, .library-dock { transition: none; }
 }
 
 /* Rendu en cours : balayage lumineux et anneau sur la case, barre de progression en bas. */
@@ -269,22 +269,4 @@ body.library-collapsed .chain .library-dock { width: 64px; margin-right: 0; bord
 .gen-bar span { display: block; height: 100%; width: 0; border-radius: 3px; background: var(--active); transition: width .3s linear; }
 @media (prefers-reduced-motion: reduce) {
   .cell-loading, .cell-loading::after { animation: none; }
-}
-
-/* Blocs latéraux : l'en-tête reste fixe, seul le contenu défile ; la barre se loge dans la marge du bloc
-   pour que les boutons de l'en-tête restent alignés avec le contenu. */
-@media (min-width: 1101px) {
-  .side-right > .block, .side-left { overflow: hidden; }
-  .side-right > .block > .block-body, .side-left > .block-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; margin: -4px -12px -14px -4px; padding: 4px 12px 14px 4px; }
-}
-
-/* En-têtes des blocs latéraux alignés sur la barre de page : même hauteur, mêmes boutons, filet en dessous. */
-@media (min-width: 1101px) {
-  .side-right > .block, .side-left { padding: 0; gap: 0; }
-  .side-right > .block > .block-head, .side-left > .block-head {
-    flex: none; min-height: 42px; margin: 0; padding: 5px 7px 5px 14px; border-bottom: 1px solid var(--line);
-  }
-  .block-head h2 { margin: 0; font-size: 14px; line-height: 1.2; }
-  .block.collapsed > .block-head { border-bottom-color: transparent; }
-  .side-right > .block > .block-body, .side-left > .block-body { margin: 0; padding: 14px 4px 14px 14px; scrollbar-gutter: stable; }
 }

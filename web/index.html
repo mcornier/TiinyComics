@@ -57,30 +57,40 @@
    </div>
   </header>
 
-  <!-- Gauche : bibliothèque et histoire, repliable -->
-  <aside id="libraryPanel" class="panel glass context side side-left">
-    <div class="context-head block-head">
-      <h2><span class="icon-slot small" data-icon="images"></span><span data-i18n="library"></span></h2>
-      <span class="section-actions">
-        <span id="libraryCount" class="muted"></span>
-        <button type="button" class="btn icon-btn collapse-btn" data-collapse="libraryPanel" aria-expanded="true"></button>
-      </span>
-    </div>
-    <div class="block-body">
-      <p class="hint" data-i18n="libraryHint"></p>
-      <button id="uploadBtn" type="button" class="btn dashed" data-icon="upload" data-i18n="loadImages"></button>
-      <input id="fileInput" type="file" accept="image/*" multiple hidden>
-      <div id="library" class="gallery"></div>
+  <!-- Gauche : bibliothèque, puis style et histoire ; deux blocs repliables -->
+  <div class="side side-left">
+    <div class="side-inline"></div>
+    <section id="libraryPanel" class="panel glass context block">
+      <div class="context-head block-head">
+        <h2><span class="icon-slot small" data-icon="images"></span><span data-i18n="library"></span></h2>
+        <span class="section-actions">
+          <span id="libraryCount" class="muted"></span>
+          <button type="button" class="btn icon-btn collapse-btn" data-collapse="libraryPanel" aria-expanded="true"></button>
+        </span>
+      </div>
+      <div class="block-body">
+        <p class="hint" data-i18n="libraryHint"></p>
+        <button id="uploadBtn" type="button" class="btn dashed" data-icon="upload" data-i18n="loadImages"></button>
+        <input id="fileInput" type="file" accept="image/*" multiple hidden>
+        <div id="library" class="gallery"></div>
+      </div>
+    </section>
 
-      <details class="story">
-        <summary class="section-title"><span class="icon-slot small" data-icon="book"></span><span data-i18n="story"></span></summary>
+    <section id="storyPanel" class="panel glass block">
+      <div class="context-head block-head">
+        <h2><span class="icon-slot small" data-icon="book"></span><span data-i18n="story"></span></h2>
+        <span class="section-actions">
+          <button type="button" class="btn icon-btn collapse-btn" data-collapse="storyPanel" aria-expanded="true"></button>
+        </span>
+      </div>
+      <div class="block-body">
         <label class="stack"><span data-i18n="styleLabel"></span>
           <textarea id="projectStyle" class="field" rows="3" data-i18n-placeholder="stylePlaceholder"></textarea></label>
         <label class="stack"><span data-i18n="synopsisLabel"></span>
-          <textarea id="synopsis" class="field" rows="4" data-i18n-placeholder="synopsisPlaceholder"></textarea></label>
-      </details>
-    </div>
-  </aside>
+          <textarea id="synopsis" class="field" rows="5" data-i18n-placeholder="synopsisPlaceholder"></textarea></label>
+      </div>
+    </section>
+  </div>
 
   <!-- Centre : la page défile avec le document -->
   <section id="stage" class="stage">
@@ -110,6 +120,12 @@
       <span class="spacer"></span>
       <label id="stripHeightBox" class="opt" data-i18n-title="stripHeight" hidden><span class="icon-slot small" data-icon="move-vertical"></span><span class="bar-label" data-i18n="stripHeight"></span>
         <input id="stripHeight" class="field num" type="number" min="400" max="20000" step="100"></label>
+      <span class="page-nav zoom-box">
+        <button id="zoomOutBtn" type="button" class="btn icon-btn" data-icon="zoom-out" data-i18n-title="zoomOut" data-i18n-aria="zoomOut"></button>
+        <button id="zoomLabel" type="button" class="btn small zoom-label" data-i18n-title="zoomFit" data-i18n-aria="zoomFit">100 %</button>
+        <button id="zoomInBtn" type="button" class="btn icon-btn" data-icon="zoom-in" data-i18n-title="zoomIn" data-i18n-aria="zoomIn"></button>
+      </span>
+      <span class="bar-sep"></span>
       <span id="pageNav" class="page-nav">
         <button id="prevPageBtn" type="button" class="btn icon-btn" data-icon="chevron-left" data-i18n-title="prevPage" data-i18n-aria="prevPage"></button>
         <span id="pageInfo" class="frame-info"></span>
@@ -123,6 +139,7 @@
 
   <!-- Droite : pages, puis la case sélectionnée ; deux blocs repliables -->
   <div class="side side-right">
+    <div class="side-inline"></div>
     <section id="pagesPanel" class="panel glass block">
       <div class="context-head block-head">
         <h2 data-i18n="pages"></h2>
@@ -234,10 +251,6 @@
 
   <!-- Chaîne de modèles : LLM et enhancer facultatifs, puis le modèle de diffusion -->
   <section id="chain" class="chain" data-i18n-aria="pipeline">
-    <button id="libraryDock" type="button" class="node library-dock" data-i18n-title="showLibrary" data-i18n-aria="showLibrary" tabindex="-1">
-      <span class="icon-slot" data-icon="images"></span>
-      <span id="libraryDockCount" class="dock-count"></span>
-    </button>
     <div id="nodeLlm" class="node">
       <div class="node-row">
         <span class="node-tag" data-i18n="llmTag"></span>

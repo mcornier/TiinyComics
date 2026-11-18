@@ -8,12 +8,16 @@ const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 5;
 
 class PageView {
-  constructor(container, { store, onSelect, onChange, onSwap }) {
+  constructor(container, { store, onSelect, onChange, onSwap, onZoom }) {
     this.el = container;
     this.store = store;
     this.onSelect = onSelect;
     this.onChange = onChange;
     this.onSwap = onSwap;
+    this.onZoom = onZoom;
+    // Zoom de la page, relatif à l'ajustement (1 = la page tient dans la zone ; en webtoon, la largeur par défaut).
+    this.zoom = 1;
+    this.fitHeight = null;
     this.project = null;
     this.pageIndex = 0;
     this.selectedId = null;
@@ -22,6 +26,19 @@ class PageView {
     this.rendering = null;
     this.drag = null;
     new ResizeObserver(() => this.refresh()).observe(container);
+    // Ctrl + molette : zoom de la page (la molette seule fait défiler, ou cadre l'image en mode Cadrer).
+    container.addEventListener('wheel', (e) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      this.setZoom(this.zoom * Math.exp(-e.deltaY * 0.002));
+    }, { passive: false });
+  }
+
+  setZoom(zoom) {
+    this.zoom = PV.clamp(zoom, 0.25, 6);
+    if (Math.abs(this.zoom - 1) < 0.03) this.zoom = 1;
+    this.refresh();
+    this.onZoom?.(this.zoom);
   }
 
   show(project, { pageIndex = this.pageIndex, selectedId = this.selectedId } = {}) {
@@ -61,15 +78,18 @@ class PageView {
   _scale(page) {
     const { width, height } = PV.pageSize(this.project, page);
     const box = this.el.getBoundingClientRect();
-    if (this.webtoon) return Math.min(560, Math.max(240, box.width - 40)) / width;
-    return Math.max(0.05, Math.min((box.width - 24) / width, (box.height - 12) / height));
+    if (this.webtoon) return (Math.min(560, Math.max(240, box.width - 40)) / width) * this.zoom;
+    // La hauteur d'ajustement se mesure quand la page est ajustée ; zoomée, la zone suit la page et ne sert plus.
+    if (this.zoom === 1 || !this.fitHeight) this.fitHeight = box.height;
+    return Math.max(0.05, Math.min((box.width - 24) / width, (this.fitHeight - 12) / height)) * this.zoom;
   }
 
   refresh() {
     if (!this.project || this.drag?.live) return;
     const pages = this.webtoon ? this.project.pages.map((p, i) => i) : [this.pageIndex];
     this.el.classList.toggle('webtoon', this.webtoon);
-    this.el.classList.toggle('fit', !this.webtoon);
+    this.el.classList.toggle('fit', !this.webtoon && this.zoom === 1);
+    this.el.classList.toggle('zoomed', !this.webtoon && this.zoom !== 1);
     this.el.classList.toggle('mode-frame', this.mode === 'frame');
     const scrollTop = this.el.scrollTop;
     this.el.replaceChildren(...pages.map((i) => this._renderPage(i)));
@@ -231,6 +251,7 @@ class PageView {
   }
 
   _cellWheel(e, panel) {
+    if (e.ctrlKey) return;
     if (this.mode !== 'frame' || panel.id !== this.selectedId || !PV.currentVersion(panel)) return;
     e.preventDefault();
     const zoom = PV.clamp((panel.placement.zoom ?? 1) * Math.exp(-e.deltaY * 0.0015), ZOOM_MIN, ZOOM_MAX);

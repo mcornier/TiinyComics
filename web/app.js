@@ -1034,7 +1034,6 @@ function renderLibrary() {
     return thumb;
   }));
   $('libraryCount').textContent = p.library.length ? String(p.library.length) : '';
-  $('libraryDockCount').textContent = $('libraryCount').textContent;
 }
 
 /* ---------- Menus du haut ---------- */
@@ -1559,18 +1558,21 @@ function renderCollapsibles() {
     const id = btn.dataset.collapse;
     const closed = !!collapsed[id];
     $(id).classList.toggle('collapsed', closed);
-    const side = id === 'libraryPanel';
-    btn.innerHTML = iconSvg(side ? 'panel-left-close' : (closed ? 'chevron-down' : 'chevron-up'));
+    btn.innerHTML = iconSvg(closed ? 'chevron-down' : 'chevron-up');
     btn.setAttribute('aria-expanded', String(!closed));
     btn.title = t(closed ? 'expandBlock' : 'collapseBlock');
     btn.setAttribute('aria-label', btn.title);
   }
-  document.body.classList.toggle('library-collapsed', !!collapsed.libraryPanel);
-  $('libraryDock').tabIndex = collapsed.libraryPanel ? 0 : -1;
-  $('libraryPanel').inert = !!collapsed.libraryPanel;
+  // Blocs repliés : leurs en-têtes se rangent côte à côte en haut de la colonne, alignés sur la barre de page.
+  for (const side of document.querySelectorAll('.side')) {
+    const inline = side.querySelector('.side-inline');
+    const blocks = [...side.querySelectorAll('.block')].sort((x, y) => x.dataset.order - y.dataset.order);
+    for (const block of blocks) (block.classList.contains('collapsed') ? inline : side).append(block);
+  }
 }
 
 function bindCollapsibles() {
+  document.querySelectorAll('.side .block').forEach((block, i) => { block.dataset.order = i; });
   for (const btn of document.querySelectorAll('.collapse-btn')) {
     btn.addEventListener('click', () => {
       const collapsed = (state.settings.collapsed ||= {});
@@ -1579,11 +1581,6 @@ function bindCollapsibles() {
       saveSettings();
     });
   }
-  $('libraryDock').addEventListener('click', () => {
-    (state.settings.collapsed ||= {}).libraryPanel = false;
-    renderCollapsibles();
-    saveSettings();
-  });
   const observer = new ResizeObserver(measureBars);
   observer.observe(document.querySelector('.topbar'));
   observer.observe($('chain'));
@@ -1825,7 +1822,11 @@ async function start() {
       }
     },
     onSwap: swapPanels,
+    onZoom: (zoom) => { $('zoomLabel').textContent = `${Math.round(zoom * 100)} %`; },
   });
+  $('zoomOutBtn').addEventListener('click', () => pageView.setZoom(pageView.zoom / 1.25));
+  $('zoomInBtn').addEventListener('click', () => pageView.setZoom(pageView.zoom * 1.25));
+  $('zoomLabel').addEventListener('click', () => pageView.setZoom(1));
   generator = new ComicGenerator({
     getClient: () => state.client,
     store,
